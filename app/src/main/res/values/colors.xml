@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_dark">#080D18</color>
+    <color name="panel">#111B2D</color>
+    <color name="panel_light">#17243A</color>
+    <color name="line">#263752</color>
+    <color name="muted">#9AABC4</color>
+    <color name="txt_white">#F4F7FF</color>
+    <color name="blue_primary">#168BD0</color>
+    <color name="cyan_accent">#4DD8D0</color>
+    <color name="gold_badge">#62471B</color>
+    <color name="gold_text">#FFE0A0</color>
+    <color name="multi_badge">#174D53</color>
+    <color name="multi_text">#A7F2EC</color>
+</resources>
