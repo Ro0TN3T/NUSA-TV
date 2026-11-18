@@ -1,6 +1,8 @@
 package com.nusatv.androidtv
 
 import android.os.Bundle
+import android.content.pm.PackageManager
+import android.content.pm.ActivityInfo
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.KeyEvent
@@ -32,9 +34,13 @@ class MainActivity : AppCompatActivity() {
     private var currentSourceIndex = 0
     private var onlyIndonesia = true
     private var isFullscreen = false
+    private var isAndroidTv = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        isAndroidTv = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+        requestedOrientation = if (isAndroidTv) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -55,7 +61,7 @@ class MainActivity : AppCompatActivity() {
         adapter = ChannelAdapter { channel ->
             playChannel(channel, enterFull = true)
         }
-        binding.rvChannels.layoutManager = GridLayoutManager(this, 4)
+        binding.rvChannels.layoutManager = GridLayoutManager(this, if (isAndroidTv) 4 else 2)
         binding.rvChannels.adapter = adapter
     }
 
@@ -217,7 +223,7 @@ class MainActivity : AppCompatActivity() {
         adapter.setSelectedChannel(null)
         binding.tvLiveLabel.text = "● NUSA TV • SIAP MENONTON"
         binding.tvWelcomeTitle.text = "Pilih channel"
-        binding.tvWelcomeDesc.text = "Gunakan tombol arah (D-Pad) dan OK pada remote TV Box untuk memilih siaran."
+        binding.tvWelcomeDesc.text = "Pilih channel dengan sentuhan atau tombol OK pada remote TV."
         binding.tvStatus.text = "Pemutaran dihentikan."
     }
 
@@ -232,6 +238,9 @@ class MainActivity : AppCompatActivity() {
             val params = binding.heroSection.layoutParams
             params.height = android.view.ViewGroup.LayoutParams.MATCH_PARENT
             binding.heroSection.layoutParams = params
+            val playerParams = binding.playerContainer.layoutParams
+            playerParams.height = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            binding.playerContainer.layoutParams = playerParams
             binding.heroSection.setPadding(0, 0, 0, 0)
             binding.playerContainer.requestFocus()
         } else {
@@ -242,10 +251,15 @@ class MainActivity : AppCompatActivity() {
 
             val density = resources.displayMetrics.density
             val params = binding.heroSection.layoutParams
-            params.height = (230 * density).toInt()
+            params.height = if (isAndroidTv) (230 * density).toInt()
+                else android.view.ViewGroup.LayoutParams.WRAP_CONTENT
             binding.heroSection.layoutParams = params
-            val padH = (24 * density).toInt()
-            val padT = (12 * density).toInt()
+            val playerParams = binding.playerContainer.layoutParams
+            playerParams.height = if (isAndroidTv) android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                else (190 * density).toInt()
+            binding.playerContainer.layoutParams = playerParams
+            val padH = ((if (isAndroidTv) 24 else 12) * density).toInt()
+            val padT = ((if (isAndroidTv) 12 else 10) * density).toInt()
             binding.heroSection.setPadding(padH, padT, padH, 0)
             binding.rvChannels.requestFocus()
         }

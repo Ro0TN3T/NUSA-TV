@@ -1,6 +1,8 @@
 package com.nusatv.androidtv
 
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -18,6 +20,9 @@ class SplashActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val isAndroidTv = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+        requestedOrientation = if (isAndroidTv) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         binding = ActivitySplashBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
