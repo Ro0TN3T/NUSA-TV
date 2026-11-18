@@ -1,31 +1,93 @@
+
 # NUSA TV
+### LIVE STREAMING • ANDROID & ANDROID TV
 
-## Update channel build APK
+![NUSA TV](assets/nusatv-banner.png)
 
-Aplikasi membaca daftar channel dari file `playlist.m3u` pada branch `main` repository ini.
+**NUSA TV** is a modern live streaming application designed for Android smartphones and Android TV devices.
 
+Enjoy a simple streaming experience with an integrated video player, channel categories, channel logos, and remote playlist updates.
 
+<p align="center">
+  <a href="https://github.com/Ro0TN3T/botpulsa/raw/refs/heads/main/nusatv.apk">
+    <img src="https://img.shields.io/badge/DOWNLOAD-NUSA_TV-087BFF?style=for-the-badge&logo=android&logoColor=white">
+  </a>
+</p>
 
-### Download Aplikasi NusaTV
+---
 
-[![Download NusaTV](https://img.shields.io/badge/DOWNLOAD-NUSATV-blue?style=for-the-badge&logo=android)](https://github.com/Ro0TN3T/botpulsa/raw/refs/heads/main/nusatv.apk)
+## FEATURES
 
-Untuk mengubah channel: buka `playlist.m3u` di GitHub, tekan Edit, ubah/tambah/hapus entry, lalu Commit changes. Buka NUSA TV dan tekan tombol **Perbarui**. Perubahan playlist tidak memerlukan build APK.
+- Live TV Streaming
+- Built-in ExoPlayer
+- M3U Playlist Support
+- Channel Logos & Categories
+- Manual Playlist Refresh
+- Android Smartphone Support
+- Android TV Optimized Interface
+- Remote Control Navigation
 
-Format entry:
+## ANDROID TV SUPPORT
+
+Designed for a comfortable big-screen experience.
+
+- Landscape orientation
+- Three-column channel grid
+- Larger channel logos
+- D-pad navigation
+- Remote control support
+- OK and Back button support
+
+## ANDROID SMARTPHONE
+
+- Portrait layout
+- Two-column channel grid
+- Touch-friendly interface
+
+## CHANNEL MANAGEMENT
+
+NUSA TV retrieves its channel list from an external `playlist.m3u` file.
+
+Channel updates can be performed directly through GitHub without rebuilding the APK.
+
+### HOW TO UPDATE CHANNELS
+
+1. Open `playlist.m3u`.
+2. Select Edit.
+3. Add, modify, or remove channel entries.
+4. Commit changes.
+5. Open NUSA TV.
+6. Press **Perbarui**.
+
+**Note:** Playlist updates do not require a new APK build.
+
+## M3U FORMAT
 
 ```m3u
-#EXTINF:-1 tvg-id="CHANNEL.ID" tvg-name="Nama Channel" tvg-logo="https://alamat-logo.png" group-title="Indonesia",Nama Channel
-https://alamat-stream-publik.m3u8
+#EXTINF:-1 tvg-id="CHANNEL.ID" tvg-name="Channel Name" tvg-logo="https://example.com/logo.png" group-title="Indonesia",Channel Name
+https://example.com/live/stream.m3u8
 ```
 
-Gunakan URL HLS publik yang langsung menuju stream dan memang boleh digunakan. NUSA TV memutar stream melalui ExoPlayer di dalam aplikasi. Jika GitHub tidak dapat diakses atau playlist kosong, aplikasi menampilkan status gagal; tidak ada daftar channel lama yang tertanam sebagai fallback.
+Use publicly accessible streams that you are authorized to use.
 
-Source aplikasi yang berubah tetap memerlukan build APK baru. Perubahan `playlist.m3u` saja tidak.
+---
 
-## Dukungan Android TV
-- Perangkat Android TV menggunakan orientasi landscape dan layout khusus layar lebar (sw600dp).
-- Daftar channel memakai 3 kolom dengan ukuran item dan logo lebih besar.
-- Item channel dan tombol memiliki target fokus untuk navigasi D-pad/remote (atas, bawah, kiri, kanan, OK).
-- Tombol Back pada remote keluar dari mode layar penuh kembali ke daftar channel.
-- HP tetap menggunakan layout potret dan grid 2 kolom.
+## DOWNLOAD NUSA TV
+
+<p align="center">
+  <a href="https://github.com/Ro0TN3T/botpulsa/raw/refs/heads/main/nusatv.apk">
+    <img src="https://img.shields.io/badge/⬇_DOWNLOAD_APK-NUSA_TV-blue?style=for-the-badge&logo=android">
+  </a>
+</p>
+
+**Platform:** Android & Android TV  
+**Player:** ExoPlayer  
+**Playlist:** M3U / HLS  
+**Distribution:** GitHub
+
+---
+
+<p align="center">
+  <b>NUSA TV</b><br>
+  Your Entertainment, Your Screen.
+</p>
