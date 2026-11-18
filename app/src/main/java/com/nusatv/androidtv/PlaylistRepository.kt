@@ -1,8 +1,6 @@
 package com.nusatv.androidtv
 
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -24,122 +22,38 @@ object PlaylistRepository {
         "net", "mdtv", "cnn indonesia", "cnbc indonesia", "btv", "sin po tv", "garuda tv", "nusantara tv"
     )
 
-    private fun getNationalFallbacks(): List<TvChannel> {
-        val densReferer = "https://www.dens.tv/"
-        val densOrigin = "https://www.dens.tv"
-        val vidioReferer = "https://www.vidio.com/"
-
-        return listOf(
-            createFallback("RCTI", "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/RCTI_logo_2015.svg/512px-RCTI_logo_2015.svg.png", listOf(
-                StreamCandidate("https://op-flashcon-digdayahd-1.dens.tv/s/s01/index.m3u8", "DensTV • Native Header", referer = densReferer, origin = densOrigin, requiresCustomHeader = true)
-            )),
-            createFallback("SCTV", "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cc/SCTV_Logo.svg/512px-SCTV_Logo.svg.png", listOf(
-                StreamCandidate("https://op-flashcon-digdayahd-1.dens.tv/h/h217/01.m3u8?app_type=web&userid=lite&chname=SCTV", "DensTV • Native Header", referer = densReferer, origin = densOrigin, requiresCustomHeader = true),
-                StreamCandidate("https://kmklive-lh.akamaihd.net/i/sctv_live@577566/master.m3u8", "Vidio/Akamai • Backup", referer = vidioReferer, requiresCustomHeader = true)
-            )),
-            createFallback("Indosiar", "https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/Indosiar_2015.svg/512px-Indosiar_2015.svg.png", listOf(
-                StreamCandidate("https://op-flashcon-digdayahd-1.dens.tv/h/h207/01.m3u8", "DensTV • Native Header", referer = densReferer, origin = densOrigin, requiresCustomHeader = true),
-                StreamCandidate("https://kmklive-lh.akamaihd.net/i/indosiar_live@577566/master.m3u8", "Vidio/Akamai • Backup", referer = vidioReferer, requiresCustomHeader = true)
-            )),
-            createFallback("MNCTV", "https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/MNCTV_logo.svg/512px-MNCTV_logo.svg.png", listOf(
-                StreamCandidate("https://op-flashcon-digdayahd-1.dens.tv/s/s03/index.m3u8", "DensTV • Native Header", referer = densReferer, origin = densOrigin, requiresCustomHeader = true)
-            )),
-            createFallback("GTV", "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/GTV_2017.svg/512px-GTV_2017.svg.png", listOf(
-                StreamCandidate("https://op-flashcon-digdayahd-1.dens.tv/s/s04/index.m3u8", "DensTV • Native Header", referer = densReferer, origin = densOrigin, requiresCustomHeader = true)
-            )),
-            createFallback("ANTV", "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2e/ANTV_logo.svg/512px-ANTV_logo.svg.png", listOf(
-                StreamCandidate("https://op-flashcon-digdayahd-1.dens.tv/h/h208/01.m3u8", "DensTV • Native Header", referer = densReferer, origin = densOrigin, requiresCustomHeader = true)
-            )),
-            createFallback("Trans TV", "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Trans_TV_2013.svg/512px-Trans_TV_2013.svg.png", listOf(
-                StreamCandidate("https://video.detik.com/transtv/smil:transtv.smil/playlist.m3u8", "Detik/Transmedia • Resmi"),
-                StreamCandidate("https://op-flashcon-digdayahd-1.dens.tv/h/h215/01.m3u8", "DensTV • Backup", referer = densReferer, origin = densOrigin, requiresCustomHeader = true)
-            )),
-            createFallback("Trans7", "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/Trans7_2013.svg/512px-Trans7_2013.svg.png", listOf(
-                StreamCandidate("https://video.detik.com/trans7/smil:trans7.smil/playlist.m3u8", "Detik/Transmedia • Resmi"),
-                StreamCandidate("https://op-flashcon-digdayahd-1.dens.tv/h/h216/01.m3u8", "DensTV • Backup", referer = densReferer, origin = densOrigin, requiresCustomHeader = true)
-            )),
-            createFallback("TVRI Nasional", "https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/TVRI_logo_2019.svg/512px-TVRI_logo_2019.svg.png", listOf(
-                StreamCandidate("https://ott-balancer.tvri.go.id/live/eds/Nasional/hls/Nasional.m3u8", "TVRI OTT • Resmi")
-            )),
-            createFallback("tvOne", "https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/TvOne_2023.svg/512px-TvOne_2023.svg.png", listOf(
-                StreamCandidate("https://op-flashcon-digdayahd-1.dens.tv/h/h209/01.m3u8", "DensTV • Native Header", referer = densReferer, origin = densOrigin, requiresCustomHeader = true)
-            )),
-            createFallback("Metro TV", "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/Metro_TV_logo.svg/512px-Metro_TV_logo.svg.png", listOf(
-                StreamCandidate("https://edge.medcom.id/live-edge/smil:metrotv.smil/playlist.m3u8", "Medcom • Resmi"),
-                StreamCandidate("https://op-flashcon-digdayahd-1.dens.tv/h/h210/01.m3u8", "DensTV • Backup", referer = densReferer, origin = densOrigin, requiresCustomHeader = true)
-            )),
-            createFallback("Kompas TV", "https://upload.wikimedia.org/wikipedia/commons/thumb/4/45/Kompas_TV_2017.svg/512px-Kompas_TV_2017.svg.png", listOf(
-                StreamCandidate("https://op-flashcon-digdayahd-1.dens.tv/h/h211/01.m3u8", "DensTV • Native Header", referer = densReferer, origin = densOrigin, requiresCustomHeader = true)
-            )),
-            createFallback("CNN Indonesia", "https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/CNN_Indonesia_logo.svg/512px-CNN_Indonesia_logo.svg.png", listOf(
-                StreamCandidate("https://live.cnnindonesia.com/livecnn/smil:cnntv.smil/playlist.m3u8", "CNN Indonesia • Resmi")
-            )),
-            createFallback("CNBC Indonesia", "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/CNBC_Indonesia_logo.svg/512px-CNBC_Indonesia_logo.svg.png", listOf(
-                StreamCandidate("https://live.cnbcindonesia.com/livecnbc/smil:cnbctv.smil/playlist.m3u8", "CNBC Indonesia • Resmi")
-            )),
-            createFallback("RTV", "https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/RTV_logo.svg/512px-RTV_logo.svg.png", listOf(
-                StreamCandidate("https://op-flashcon-digdayahd-1.dens.tv/h/h213/01.m3u8", "DensTV • Native Header", referer = densReferer, origin = densOrigin, requiresCustomHeader = true)
-            )),
-            createFallback("Moji", "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Moji_logo.svg/512px-Moji_logo.svg.png", listOf(
-                StreamCandidate("https://op-flashcon-digdayahd-1.dens.tv/h/h212/01.m3u8", "DensTV • Native Header", referer = densReferer, origin = densOrigin, requiresCustomHeader = true)
-            )),
-            createFallback("iNews", "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/INews_logo.svg/512px-INews_logo.svg.png", listOf(
-                StreamCandidate("https://op-flashcon-digdayahd-1.dens.tv/s/s02/index.m3u8", "DensTV • Native Header", referer = densReferer, origin = densOrigin, requiresCustomHeader = true)
-            ))
-        )
-    }
-
-    private fun createFallback(name: String, logo: String, sources: List<StreamCandidate>): TvChannel {
-        val key = canonicalName(name)
-        return TvChannel(
-            key = key,
-            name = name,
-            logo = logo,
-            country = "Indonesia",
-            categories = listOf("Indonesia", "TV Nasional"),
-            sources = sources.toMutableList(),
-            isNational = true
-        )
-    }
-
     suspend fun loadAllChannels(): List<TvChannel> = withContext(Dispatchers.IO) {
-        val channelMap = LinkedHashMap<String, TvChannel>()
+        val request = Request.Builder()
+            .url(DefaultSources.REMOTE_PLAYLIST)
+            .header("User-Agent", "Mozilla/5.0 (Android; NusaTV/1.0)")
+            .build()
 
-        for (fb in getNationalFallbacks()) {
-            channelMap[fb.key] = fb
-        }
-
-        val deferredResults = DefaultSources.PLAYLISTS.map { src ->
-            async {
-                fetchAndParse(src)
+        val body = client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IllegalStateException("Playlist GitHub gagal dimuat: HTTP ${response.code}")
             }
+            response.body?.string()?.takeIf { it.isNotBlank() }
+                ?: throw IllegalStateException("Playlist GitHub kosong")
         }
-        val parsedLists = deferredResults.awaitAll()
 
-        for (items in parsedLists) {
-            for (item in items) {
-                val existing = channelMap[item.key]
-                if (existing == null) {
-                    channelMap[item.key] = item
-                } else {
-                    for (cand in item.sources) {
-                        if (existing.sources.none { it.url == cand.url }) {
-                            existing.sources.add(cand)
-                        }
-                    }
-                }
+        val source = PlaylistSource(
+            url = DefaultSources.REMOTE_PLAYLIST,
+            name = "NUSA TV • GitHub",
+            fallbackCountry = "Indonesia",
+            fallbackGroup = "Indonesia"
+        )
+
+        parseM3U(body, source)
+            .groupBy { it.key }
+            .map { (_, channels) ->
+                val first = channels.first()
+                first.copy(sources = channels.flatMap { it.sources }.distinctBy { it.url }.toMutableList())
             }
-        }
-
-        channelMap.values.sortedWith(compareBy<TvChannel>(
-            { !it.isNational },
-            {
-                val idx = NATIONAL_PRIORITY.indexOf(canonicalName(it.name))
-                if (idx >= 0) idx else 999
-            },
-            { it.country != "Indonesia" },
-            { it.name.lowercase() }
-        ))
+            .sortedWith(compareBy<TvChannel>(
+                { !it.isNational },
+                { val idx = NATIONAL_PRIORITY.indexOf(canonicalName(it.name)); if (idx >= 0) idx else 999 },
+                { it.name.lowercase() }
+            ))
     }
 
     private fun fetchAndParse(source: PlaylistSource): List<TvChannel> {

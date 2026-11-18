@@ -61,7 +61,7 @@ class MainActivity : AppCompatActivity() {
         adapter = ChannelAdapter { channel ->
             playChannel(channel, enterFull = true)
         }
-        binding.rvChannels.layoutManager = GridLayoutManager(this, if (isAndroidTv) 4 else 2)
+        binding.rvChannels.layoutManager = GridLayoutManager(this, if (isAndroidTv) 3 else 2)
         binding.rvChannels.adapter = adapter
     }
 
@@ -111,11 +111,17 @@ class MainActivity : AppCompatActivity() {
         binding.btnReload.isEnabled = false
         binding.tvStatus.text = "Memperbarui playlist TV Nasional & global..."
         lifecycleScope.launch {
-            allChannels = PlaylistRepository.loadAllChannels()
-            ChannelCache.channels = allChannels
-            applyFilter()
-            binding.btnReload.isEnabled = true
-            binding.tvStatus.text = "${allChannels.size} channel berhasil dimuat."
+            try {
+                allChannels = PlaylistRepository.loadAllChannels()
+                ChannelCache.channels = allChannels
+                applyFilter()
+                binding.tvStatus.text = "${allChannels.size} channel dimuat dari GitHub."
+            } catch (error: Exception) {
+                binding.tvStatus.text = "Gagal memuat playlist GitHub. Periksa koneksi internet."
+                if (allChannels.isEmpty()) adapter.submitList(emptyList())
+            } finally {
+                binding.btnReload.isEnabled = true
+            }
         }
     }
 
@@ -128,6 +134,13 @@ class MainActivity : AppCompatActivity() {
         }
         adapter.submitList(filtered, currentChannel?.key)
         binding.tvStats.text = "${filtered.size} channel siap"
+        if (isAndroidTv && !isFullscreen && filtered.isNotEmpty()) {
+            binding.rvChannels.post {
+                if (!binding.rvChannels.hasFocus()) {
+                    binding.rvChannels.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
+                }
+            }
+        }
     }
 
     private fun playChannel(channel: TvChannel, enterFull: Boolean) {
