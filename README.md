@@ -2,7 +2,7 @@
 # NUSA TV
 ### LIVE STREAMING • ANDROID & ANDROID TV
 
-![NUSA TV](assets/nusatv-banner.png)
+![NUSA TV](icon-nusa-tv.png)
 
 **NUSA TV** is a modern live streaming application designed for Android smartphones and Android TV devices.
 
