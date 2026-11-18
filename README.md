@@ -1,8 +1,14 @@
 # NUSA TV
 
-## Update channel tanpa build APK
+## Update channel build APK
 
 Aplikasi membaca daftar channel dari file `playlist.m3u` pada branch `main` repository ini.
+
+
+
+### Download Aplikasi NusaTV
+
+[![Download NusaTV](https://img.shields.io/badge/DOWNLOAD-NUSATV-blue?style=for-the-badge&logo=android)](https://github.com/Ro0TN3T/botpulsa/raw/refs/heads/main/nusatv.apk)
 
 Untuk mengubah channel: buka `playlist.m3u` di GitHub, tekan Edit, ubah/tambah/hapus entry, lalu Commit changes. Buka NUSA TV dan tekan tombol **Perbarui**. Perubahan playlist tidak memerlukan build APK.
 
