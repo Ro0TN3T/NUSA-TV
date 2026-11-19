@@ -37,6 +37,8 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.recyclerview.widget.GridLayoutManager
 import com.nusatv.androidtv.databinding.ActivityMainBinding
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.IOException
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -51,6 +53,7 @@ class MainActivity : AppCompatActivity() {
     private var currentChannel: TvChannel? = null
     private var currentSourceIndex = 0
     private var selectedCategory = "Indonesia"
+    private var filterGeneration = 0
     private var categoryDialog: AlertDialog? = null
     private var isFullscreen = false
     private var isAndroidTv = false
@@ -84,15 +87,15 @@ class MainActivity : AppCompatActivity() {
         setupControls()
 
         allChannels = ChannelCache.channels
-        refreshEpg()
-        mainHandler.postDelayed(epgRefreshRunnable, 30 * 60 * 1000L)
         if (allChannels.isEmpty()) {
             reloadPlaylists()
         } else {
+            refreshEpg()
             applyFilter()
             val firstChannel = allChannels.firstOrNull { it.country == "Indonesia" } ?: allChannels.firstOrNull()
             firstChannel?.let { playChannel(it, enterFull = false) }
         }
+        mainHandler.postDelayed(epgRefreshRunnable, 30 * 60 * 1000L)
     }
 
     private fun setupRecyclerView() {
@@ -170,21 +173,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshEpg() {
-        if (isRefreshingEpg || isFinishing || isDestroyed) return
+        if (allChannels.isEmpty() || isRefreshingEpg || isFinishing || isDestroyed) return
         isRefreshingEpg = true
         lifecycleScope.launch {
             try {
                 val schedules = EpgRepository.loadSchedules()
-                val updated = allChannels.map { channel ->
-                    val schedule = channel.tvgId?.let { schedules[it] }
-                        ?: schedules[channel.key]
-                        ?: schedules.entries.firstOrNull {
-                            PlaylistRepository.canonicalName(it.key) == channel.key
-                        }?.value
-                    channel.copy(
-                        currentProgramTitle = schedule?.current,
-                        nextProgramTitle = schedule?.next
-                    )
+                // Normalize once instead of scanning the entire EPG map for every channel.
+                val normalizedSchedules = withContext(Dispatchers.Default) {
+                    schedules.entries.associate { PlaylistRepository.canonicalName(it.key) to it.value }
+                }
+                val updated = withContext(Dispatchers.Default) {
+                    allChannels.map { channel ->
+                        val schedule = channel.tvgId?.let { schedules[it] }
+                            ?: schedules[channel.key]
+                            ?: normalizedSchedules[channel.key]
+                        channel.copy(
+                            currentProgramTitle = schedule?.current,
+                            nextProgramTitle = schedule?.next
+                        )
+                    }
                 }
                 allChannels = updated
                 if (allChannels.isNotEmpty()) applyFilter()
@@ -198,20 +205,27 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Filter on a worker thread so tapping a category never scans a large playlist on the UI thread.
     private fun applyFilter() {
-        val filteredChannels = when (selectedCategory) {
-            "Semua" -> allChannels
-            else -> allChannels.filter { channelMatchesCategory(it, selectedCategory) }
-        }
-        adapter.submitList(filteredChannels, currentChannel?.key)
-        binding.tvStats.text = "${filteredChannels.size} channel"
-        binding.tvSectionTitle.text = if (selectedCategory == "Semua") "Daftar Channel" else selectedCategory
-        binding.btnFilterIndo.text = "$selectedCategory ▼"
-        updateServerTabs()
-        if (isAndroidTv && !isFullscreen && filteredChannels.isNotEmpty()) {
-            binding.rvChannels.post {
-                if (!binding.rvChannels.hasFocus()) {
-                    binding.rvChannels.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
+        val requestId = ++filterGeneration
+        val source = allChannels
+        val category = selectedCategory
+        lifecycleScope.launch {
+            val filteredChannels = withContext(Dispatchers.Default) {
+                if (category == "Semua") source
+                else source.filter { channelMatchesCategory(it, category) }
+            }
+            if (requestId != filterGeneration || isFinishing || isDestroyed) return@launch
+            adapter.submitList(filteredChannels, currentChannel?.key)
+            binding.tvStats.text = "${filteredChannels.size} channel"
+            binding.tvSectionTitle.text = if (category == "Semua") "Daftar Channel" else category
+            binding.btnFilterIndo.text = "$category ▼"
+            updateServerTabs()
+            if (isAndroidTv && !isFullscreen && filteredChannels.isNotEmpty()) {
+                binding.rvChannels.post {
+                    if (!binding.rvChannels.hasFocus()) {
+                        binding.rvChannels.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
+                    }
                 }
             }
         }

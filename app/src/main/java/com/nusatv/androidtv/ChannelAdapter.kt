@@ -5,6 +5,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.recyclerview.widget.AsyncListDiffer
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 
@@ -12,31 +14,44 @@ class ChannelAdapter(
     private val onChannelClick: (TvChannel) -> Unit
 ) : RecyclerView.Adapter<ChannelAdapter.ChannelViewHolder>() {
 
-    private var items: List<TvChannel> = emptyList()
+    private val differ = AsyncListDiffer(this, object : DiffUtil.ItemCallback<TvChannel>() {
+        override fun areItemsTheSame(oldItem: TvChannel, newItem: TvChannel) = oldItem.key == newItem.key
+        override fun areContentsTheSame(oldItem: TvChannel, newItem: TvChannel) = oldItem == newItem
+    })
     private var selectedKey: String? = null
 
     fun submitList(newList: List<TvChannel>, currentKey: String? = selectedKey) {
-        items = newList
+        val oldKey = selectedKey
         selectedKey = currentKey
-        notifyDataSetChanged()
+        differ.submitList(newList) {
+            if (oldKey != currentKey) {
+                val oldPosition = differ.currentList.indexOfFirst { it.key == oldKey }
+                val newPosition = differ.currentList.indexOfFirst { it.key == currentKey }
+                if (oldPosition >= 0) notifyItemChanged(oldPosition)
+                if (newPosition >= 0 && newPosition != oldPosition) notifyItemChanged(newPosition)
+            }
+        }
     }
 
     fun setSelectedChannel(key: String?) {
+        val oldPosition = differ.currentList.indexOfFirst { it.key == selectedKey }
         selectedKey = key
-        notifyDataSetChanged()
+        val newPosition = differ.currentList.indexOfFirst { it.key == selectedKey }
+        if (oldPosition >= 0) notifyItemChanged(oldPosition)
+        if (newPosition >= 0 && newPosition != oldPosition) notifyItemChanged(newPosition)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChannelViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_channel, parent, false)
+        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_channel, parent, false)
         return ChannelViewHolder(view)
     }
 
     override fun onBindViewHolder(holder: ChannelViewHolder, position: Int) {
-        holder.bind(items[position], items[position].key == selectedKey)
+        val channel = differ.currentList[position]
+        holder.bind(channel, channel.key == selectedKey)
     }
 
-    override fun getItemCount(): Int = items.size
+    override fun getItemCount(): Int = differ.currentList.size
 
     inner class ChannelViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val ivLogo: ImageView = itemView.findViewById(R.id.ivLogo)
@@ -57,34 +72,26 @@ class ChannelAdapter(
                 channel.programTitle?.isNotBlank() == true -> channel.programTitle
                 else -> "${channel.country} • ${channel.sources.size} server"
             }
-
             badgeMulti.visibility = if (channel.sources.size > 1) View.VISIBLE else View.GONE
-            badgeNative.visibility = if (channel.sources.any { it.requiresCustomHeader }) View.VISIBLE else View.GONE
-
-            val initials = channel.name.take(3).uppercase()
-            tvFallback.text = initials
-
-            if (channel.logo.isNotEmpty()) {
+            badgeNative.visibility = if (channel.sources.any { it.requiresCustomHeader } ) View.VISIBLE else View.GONE
+            tvFallback.text = channel.name.take(3).uppercase()
+            if (channel.logo.isNotBlank()) {
                 ivLogo.visibility = View.VISIBLE
                 tvFallback.visibility = View.GONE
                 ivLogo.load(channel.logo) {
                     crossfade(false)
                     size(96, 96)
-                    listener(
-                        onError = { _, _ ->
-                            ivLogo.visibility = View.GONE
-                            tvFallback.visibility = View.VISIBLE
-                        }
-                    )
+                    listener(onError = { _, _ ->
+                        ivLogo.visibility = View.GONE
+                        tvFallback.visibility = View.VISIBLE
+                    })
                 }
             } else {
+                ivLogo.setImageDrawable(null)
                 ivLogo.visibility = View.GONE
                 tvFallback.visibility = View.VISIBLE
             }
-
-            itemView.setOnClickListener {
-                onChannelClick(channel)
-            }
+            itemView.setOnClickListener { onChannelClick(channel) }
         }
     }
 }
