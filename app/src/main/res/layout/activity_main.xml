@@ -73,7 +73,7 @@
                     android:background="@drawable/bg_tile_selector"
                     android:minWidth="0dp"
                     android:paddingHorizontal="14dp"
-                    android:text="🇮🇩 TV Nasional"
+                    android:text="Indonesia ▾"
                     android:textAllCaps="false"
                     android:textColor="@color/txt_white"
                     android:textSize="13sp" />

@@ -7,6 +7,14 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.KeyEvent
 import android.view.View
+import android.view.Gravity
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
+import android.view.WindowManager
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -32,7 +40,8 @@ class MainActivity : AppCompatActivity() {
     private var allChannels: List<TvChannel> = emptyList()
     private var currentChannel: TvChannel? = null
     private var currentSourceIndex = 0
-    private var onlyIndonesia = true
+    private var selectedCategory = "Indonesia"
+    private var categoryDialog: AlertDialog? = null
     private var isFullscreen = false
     private var isAndroidTv = false
 
@@ -61,17 +70,13 @@ class MainActivity : AppCompatActivity() {
         adapter = ChannelAdapter { channel ->
             playChannel(channel, enterFull = true)
         }
-        binding.rvChannels.layoutManager = GridLayoutManager(this, if (isAndroidTv) 3 else 2)
+        binding.rvChannels.layoutManager = GridLayoutManager(this, if (isAndroidTv) 3 else 1)
         binding.rvChannels.adapter = adapter
     }
 
     private fun setupControls() {
-        binding.btnFilterIndo.setOnClickListener {
-            onlyIndonesia = !onlyIndonesia
-            binding.btnFilterIndo.text = if (onlyIndonesia) "🇮🇩 TV Nasional" else "🌐 Semua Negara"
-            binding.tvSectionTitle.text = if (onlyIndonesia) "🇮🇩 TV Nasional & Indonesia" else "🌐 Semua Channel"
-            applyFilter()
-        }
+        binding.btnFilterIndo.text = "Indonesia ▾"
+        binding.btnFilterIndo.setOnClickListener { showCategoryDialog() }
 
         binding.btnFullscreen.setOnClickListener {
             toggleFullscreen(!isFullscreen)
@@ -128,12 +133,25 @@ class MainActivity : AppCompatActivity() {
     private fun applyFilter() {
         val query = binding.etSearch.text.toString().trim().lowercase()
         val filtered = allChannels.filter { ch ->
-            val matchCountry = !onlyIndonesia || ch.country.equals("Indonesia", true)
-            val matchQuery = query.isEmpty() || ch.name.lowercase().contains(query)
-            matchCountry && matchQuery
+            val matchCategory = selectedCategory == "Semua" || channelMatchesCategory(ch, selectedCategory)
+            val matchQuery = query.isEmpty() || ch.name.lowercase().contains(query) ||
+                ch.categories.any { it.lowercase().contains(query) }
+            matchCategory && matchQuery
         }
         adapter.submitList(filtered, currentChannel?.key)
-        binding.tvStats.text = "${filtered.size} channel siap"
+        binding.tvStats.text = "${filtered.size} channel"
+        binding.tvSectionTitle.text = when (selectedCategory) {
+            "Semua" -> "Semua Channel"
+            "Indonesia" -> "TV Nasional & Indonesia"
+            "News" -> "Berita TV"
+            "Kids" -> "TV Anak"
+            else -> selectedCategory
+        }
+        binding.btnFilterIndo.text = when (selectedCategory) {
+            "News" -> "Berita TV ▾"
+            "Kids" -> "TV Anak ▾"
+            else -> "$selectedCategory ▾"
+        }
         if (isAndroidTv && !isFullscreen && filtered.isNotEmpty()) {
             binding.rvChannels.post {
                 if (!binding.rvChannels.hasFocus()) {
@@ -143,9 +161,163 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+
+    private data class CategoryOption(val title: String, val code: String, val badge: String = "")
+
+    private fun showCategoryDialog() {
+        val options = listOf(
+            CategoryOption("Semua Channel", "ALL"),
+            CategoryOption("Events", "EV", "LIVE"),
+            CategoryOption("Indonesia", "IN"),
+            CategoryOption("Sports", "SP"),
+            CategoryOption("Kids • TV Anak", "KI"),
+            CategoryOption("Blockbuster", "BL"),
+            CategoryOption("Knowledge", "KN"),
+            CategoryOption("News • Berita TV", "NE")
+        )
+
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(12), dp(18), dp(12))
+            background = rounded("#07182B", "#14549A", 22)
+        }
+        val title = TextView(this).apply {
+            text = "Pilih Kategori"
+            setTextColor(Color.WHITE)
+            textSize = 22f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp(8), dp(8), dp(8), dp(14))
+        }
+        panel.addView(title)
+
+        options.forEach { option ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                minimumHeight = dp(50)
+                setPadding(dp(8), 0, dp(8), 0)
+                background = if (selectedCategory == option.title.substringBefore(" •") ||
+                    (option.code == "ALL" && selectedCategory == "Semua")) rounded("#183B5C", "#315B85", 8)
+                    else rounded("#0A1A2B", "#24384C", 0)
+                isClickable = true
+                isFocusable = true
+            }
+            val label = TextView(this).apply {
+                text = option.title
+                setTextColor(Color.WHITE)
+                textSize = 17f
+                typeface = Typeface.DEFAULT_BOLD
+                layoutParams = LinearLayout.LayoutParams(0, dp(50), 1f)
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            row.addView(label)
+            if (option.badge.isNotEmpty()) {
+                val badge = TextView(this).apply {
+                    text = option.badge
+                    setTextColor(Color.WHITE)
+                    textSize = 13f
+                    typeface = Typeface.DEFAULT_BOLD
+                    gravity = Gravity.CENTER
+                    setPadding(dp(12), dp(5), dp(12), dp(5))
+                    background = rounded("#F32135", "#F32135", 18)
+                }
+                row.addView(badge)
+            } else {
+                val code = TextView(this).apply {
+                    text = option.code
+                    setTextColor(Color.rgb(145, 164, 188))
+                    textSize = 14f
+                    typeface = Typeface.DEFAULT_BOLD
+                    gravity = Gravity.CENTER
+                    minWidth = dp(36)
+                }
+                row.addView(code)
+            }
+            row.setOnClickListener {
+                selectedCategory = when (option.code) {
+                    "ALL" -> "Semua"
+                    "EV" -> "Events"
+                    "IN" -> "Indonesia"
+                    "SP" -> "Sports"
+                    "KI" -> "Kids"
+                    "BL" -> "Blockbuster"
+                    "KN" -> "Knowledge"
+                    else -> "News"
+                }
+                categoryDialog?.dismiss()
+                applyFilter()
+            }
+            panel.addView(row)
+        }
+
+        val cancel = TextView(this).apply {
+            text = "Batal"
+            setTextColor(Color.BLACK)
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setPadding(dp(26), dp(12), dp(26), dp(12))
+            background = rounded("#FFFFFF", "#FFFFFF", 28)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dp(48)
+            ).apply {
+                gravity = Gravity.END
+                topMargin = dp(14)
+                rightMargin = dp(4)
+            }
+            setOnClickListener { categoryDialog?.dismiss() }
+        }
+        panel.addView(cancel)
+
+        categoryDialog = AlertDialog.Builder(this)
+            .setView(panel)
+            .create()
+        categoryDialog?.setOnShowListener {
+            categoryDialog?.window?.setBackgroundDrawableResource(android.R.color.transparent)
+            categoryDialog?.window?.setLayout(
+                (resources.displayMetrics.widthPixels * 0.88f).toInt(),
+                WindowManager.LayoutParams.WRAP_CONTENT
+            )
+            categoryDialog?.window?.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            categoryDialog?.window?.let { dialogWindow ->
+                val params = dialogWindow.attributes
+                params.dimAmount = 0.68f
+                dialogWindow.attributes = params
+            }
+        }
+        categoryDialog?.show()
+    }
+
+    private fun channelMatchesCategory(channel: TvChannel, category: String): Boolean {
+        val name = channel.name.lowercase()
+        val groups = channel.categories.joinToString(" ").lowercase()
+        val text = "$name $groups"
+        return when (category) {
+            "Indonesia" -> channel.country.equals("Indonesia", true) ||
+                text.contains("indonesia") || text.contains("nasional")
+            "Events" -> text.contains("event") || text.contains("live event")
+            "Sports" -> listOf("sport", "sports", "olahraga", "football", "soccer", "bola").any { text.contains(it) }
+            "Kids" -> listOf("kids", "kid", "anak", "children", "cartoon", "animation", "kartun").any { text.contains(it) }
+            "Blockbuster" -> listOf("movie", "movies", "film", "cinema", "blockbuster").any { text.contains(it) }
+            "Knowledge" -> listOf("knowledge", "education", "documentary", "edukasi", "science", "sains").any { text.contains(it) }
+            "News" -> listOf("news", "berita", "cnbc", "cnn", "inews", "metro tv", "tv one").any { text.contains(it) }
+            else -> false
+        }
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun rounded(fill: String, stroke: String, radiusDp: Int): GradientDrawable =
+        GradientDrawable().apply {
+            setColor(Color.parseColor(fill))
+            cornerRadius = dp(radiusDp).toFloat()
+            setStroke(dp(1), Color.parseColor(stroke))
+        }
+
     private fun playChannel(channel: TvChannel, enterFull: Boolean) {
         if (channel.sources.isEmpty()) return
         currentChannel = channel
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         currentSourceIndex = 0
         adapter.setSelectedChannel(channel.key)
 
@@ -233,6 +405,7 @@ class MainActivity : AppCompatActivity() {
     private fun stopPlayback() {
         releasePlayer()
         currentChannel = null
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         adapter.setSelectedChannel(null)
         binding.tvLiveLabel.text = "● NUSA TV • SIAP MENONTON"
         binding.tvWelcomeTitle.text = "Pilih channel"
@@ -242,6 +415,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun toggleFullscreen(enable: Boolean) {
         isFullscreen = enable
+        if (!isAndroidTv) {
+            requestedOrientation = if (enable) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
         if (enable) {
             binding.headerBar.visibility = View.GONE
             binding.welcomePanel.visibility = View.GONE

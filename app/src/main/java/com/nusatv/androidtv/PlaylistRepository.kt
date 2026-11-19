@@ -39,8 +39,8 @@ object PlaylistRepository {
         val source = PlaylistSource(
             url = DefaultSources.REMOTE_PLAYLIST,
             name = "NUSA TV • GitHub",
-            fallbackCountry = "Indonesia",
-            fallbackGroup = "Indonesia"
+            fallbackCountry = "",
+            fallbackGroup = ""
         )
 
         parseM3U(body, source)
@@ -95,6 +95,8 @@ object PlaylistRepository {
                     val rawTitle = if (commaIdx >= 0) line.substring(commaIdx + 1).trim() else "Channel"
 
                     currentName = cleanName(rawTitle)
+                    currentCountry = source.fallbackCountry
+                    currentGroup = source.fallbackGroup
                     currentLogo = extractAttr(attrs, "tvg-logo")
                     val c = extractAttr(attrs, "tvg-country")
                     if (c.isNotEmpty()) currentCountry = if (c.equals("ID", true)) "Indonesia" else c
@@ -123,6 +125,7 @@ object PlaylistRepository {
                         val key = canonicalName(currentName)
                         val isIndo = currentCountry.equals("Indonesia", true) ||
                                 currentGroup.contains("indonesia", true) ||
+                                currentGroup.contains("nasional", true) ||
                                 NATIONAL_PRIORITY.contains(key)
 
                         val inferredReferer = currentReferer ?: if (line.contains("dens.tv", true)) "https://www.dens.tv/" else null
