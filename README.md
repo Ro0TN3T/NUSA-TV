@@ -75,7 +75,7 @@ Use publicly accessible streams that you are authorized to use.
 ## DOWNLOAD NUSA TV
 
 <p align="center">
-  <a href="https://github.com/Ro0TN3T/botpulsa/raw/refs/heads/main/nusatv.apk">
+  <a href="https://github.com/Ro0TN3T/botpulsa/raw/refs/heads/main/IONTV.apk">
     <img src="https://img.shields.io/badge/⬇_DOWNLOAD_APK-NUSA_TV-blue?style=for-the-badge&logo=android">
   </a>
 </p>
