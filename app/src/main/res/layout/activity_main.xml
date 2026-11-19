@@ -123,23 +123,6 @@
         android:inputType="text"
         android:singleLine="true" />
 
-    <HorizontalScrollView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="#141622"
-        android:fillViewport="false"
-        android:paddingStart="14dp"
-        android:paddingTop="8dp"
-        android:paddingEnd="14dp"
-        android:paddingBottom="9dp"
-        android:scrollbars="none">
-        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal">
-            <TextView android:id="@+id/btnTabAll" android:layout_width="wrap_content" android:layout_height="42dp" android:layout_marginEnd="8dp" android:background="@drawable/bg_tab_selected" android:clickable="true" android:focusable="true" android:gravity="center" android:paddingStart="22dp" android:paddingEnd="22dp" android:text="Semua" android:textColor="#FFFFFF" android:textSize="14sp" android:textStyle="bold" />
-            <TextView android:id="@+id/btnTabNews" android:layout_width="wrap_content" android:layout_height="42dp" android:layout_marginEnd="8dp" android:background="@drawable/bg_tab_idle" android:clickable="true" android:focusable="true" android:gravity="center" android:paddingStart="22dp" android:paddingEnd="22dp" android:text="Berita TV" android:textColor="#E6E8F0" android:textSize="14sp" />
-            <TextView android:id="@+id/btnTabKids" android:layout_width="wrap_content" android:layout_height="42dp" android:background="@drawable/bg_tab_idle" android:clickable="true" android:focusable="true" android:gravity="center" android:paddingStart="22dp" android:paddingEnd="22dp" android:text="TV Anak" android:textColor="#E6E8F0" android:textSize="14sp" />
-        </LinearLayout>
-    </HorizontalScrollView>
-
     <LinearLayout
         android:id="@+id/welcomePanel"
         android:layout_width="match_parent"
