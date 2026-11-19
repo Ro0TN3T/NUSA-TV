@@ -135,6 +135,7 @@ object PlaylistRepository {
         val lines = content.replace("\uFEFF", "").lines()
 
         var currentName = ""
+        var currentProgramTitle: String? = null
         var currentLogo = ""
         var currentCountry = source.fallbackCountry
         var currentGroup = source.fallbackGroup
@@ -158,6 +159,8 @@ object PlaylistRepository {
                     val rawTitle = if (commaIdx >= 0) line.substring(commaIdx + 1).trim() else "Channel"
 
                     currentName = cleanName(rawTitle)
+                    currentProgramTitle = listOf("tvg-program", "tvg-current", "program-title", "current-program")
+                        .asSequence().map { extractAttr(attrs, it) }.firstOrNull { it.isNotBlank() }
                     currentCountry = source.fallbackCountry
                     currentGroup = source.fallbackGroup
                     currentLogo = extractAttr(attrs, "tvg-logo")
@@ -286,7 +289,8 @@ object PlaylistRepository {
                                 country = if (isIndo) "Indonesia" else currentCountry.ifEmpty { "Umum" },
                                 categories = if (isIndo) listOf("Indonesia", currentGroup.ifEmpty { "Umum" }) else listOf(currentGroup.ifEmpty { "Umum" }),
                                 sources = mutableListOf(candidate),
-                                isNational = NATIONAL_PRIORITY.contains(key)
+                                isNational = NATIONAL_PRIORITY.contains(key),
+                                programTitle = currentProgramTitle
                             )
                         )
                     }

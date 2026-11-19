@@ -69,7 +69,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         isAndroidTv = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
         requestedOrientation = if (isAndroidTv) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-            else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -88,19 +88,22 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupRecyclerView() {
         adapter = ChannelAdapter { channel ->
-            playChannel(channel, enterFull = true)
+            // Selecting a channel changes the stream in the embedded player only.
+            playChannel(channel, enterFull = false)
         }
         binding.rvChannels.layoutManager = GridLayoutManager(this, if (isAndroidTv) 3 else 1)
         binding.rvChannels.adapter = adapter
     }
 
     private fun setupControls() {
-        binding.btnFilterIndo.text = "Indonesia ▾"
-        binding.btnFilterIndo.setOnClickListener { showCategoryDialog() }
+        binding.btnFilterIndo.visibility = View.GONE
+        binding.btnFullscreen.visibility = View.GONE
+        binding.etSearch.visibility = View.GONE
+        binding.btnTabAll?.visibility = View.GONE
+        binding.btnTabNews?.visibility = View.GONE
+        binding.btnTabKids?.visibility = View.GONE
 
-        binding.btnFullscreen.setOnClickListener {
-            toggleFullscreen(!isFullscreen)
-        }
+        binding.btnFullscreen.setOnClickListener { requestLandscapeFullscreen() }
 
         binding.btnTabAll?.setOnClickListener {
             selectedCategory = "Semua"
@@ -123,9 +126,9 @@ class MainActivity : AppCompatActivity() {
             reloadPlaylists()
         }
 
-        binding.btnStop.setOnClickListener {
-            stopPlayback()
-        }
+        binding.btnStop.text = "⛶"
+        binding.btnStop.contentDescription = "Perbesar layar"
+        binding.btnStop.setOnClickListener { requestLandscapeFullscreen() }
 
         binding.btnRetry.setOnClickListener {
             currentChannel?.let { ch ->
@@ -138,13 +141,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        binding.etSearch.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                applyFilter()
-            }
-            override fun afterTextChanged(s: Editable?) {}
-        })
+
     }
 
     private fun reloadPlaylists() {
@@ -170,32 +167,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyFilter() {
-        val query = binding.etSearch.text.toString().trim().lowercase()
-        val filtered = allChannels.filter { ch ->
-            val matchCategory = selectedCategory == "Semua" || channelMatchesCategory(ch, selectedCategory)
-            val matchQuery = query.isEmpty() || ch.name.lowercase().contains(query) ||
-                ch.categories.any { it.lowercase().contains(query) }
-            matchCategory && matchQuery
-        }
-        adapter.submitList(filtered, currentChannel?.key)
-        binding.tvStats.text = "${filtered.size} channel"
-        binding.tvSectionTitle.text = when (selectedCategory) {
-            "Semua" -> "Semua Channel"
-            "Indonesia" -> "TV Nasional & Indonesia"
-            "News" -> "Berita TV"
-            "Kids" -> "TV Anak"
-            else -> selectedCategory
-        }
-        binding.btnFilterIndo.text = when (selectedCategory) {
-            "News" -> "Berita TV ▾"
-            "Kids" -> "TV Anak ▾"
-            else -> "$selectedCategory ▾"
-        }
-
-        binding.btnTabAll?.setBackgroundResource(if (selectedCategory == "Semua" || selectedCategory == "Indonesia") R.drawable.bg_tab_selected else R.drawable.bg_tab_idle)
-        binding.btnTabNews?.setBackgroundResource(if (selectedCategory == "News") R.drawable.bg_tab_selected else R.drawable.bg_tab_idle)
-        binding.btnTabKids?.setBackgroundResource(if (selectedCategory == "Kids") R.drawable.bg_tab_selected else R.drawable.bg_tab_idle)
-        if (isAndroidTv && !isFullscreen && filtered.isNotEmpty()) {
+        adapter.submitList(allChannels, currentChannel?.key)
+        binding.tvStats.text = "${allChannels.size} channel"
+        binding.tvSectionTitle.text = "Daftar Channel"
+        updateServerTabs()
+        if (isAndroidTv && !isFullscreen && allChannels.isNotEmpty()) {
             binding.rvChannels.post {
                 if (!binding.rvChannels.hasFocus()) {
                     binding.rvChannels.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
@@ -204,6 +180,41 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateServerTabs() {
+        val host = binding.serverTabs ?: return
+        host.removeAllViews()
+        val sources = currentChannel?.sources.orEmpty()
+        if (sources.isEmpty()) {
+            host.visibility = View.GONE
+            return
+        }
+        host.visibility = View.VISIBLE
+        sources.forEachIndexed { index, source ->
+            val chip = TextView(this).apply {
+                text = "Server ${index + 1}"
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setTextColor(Color.WHITE)
+                setPadding(dp(13), dp(8), dp(13), dp(8))
+                background = if (index == currentSourceIndex) rounded("#1762D7", "#16D7EA", 24)
+                    else rounded("#171A28", "#30364D", 24)
+                isClickable = true
+                isFocusable = true
+                layoutParams = LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    marginEnd = dp(7)
+                }
+                contentDescription = "Putar ${source.name}"
+                setOnClickListener {
+                    currentSourceIndex = index
+                    transientRetryCount = 0
+                    isTryingFallback = false
+                    currentChannel?.let { startStream(it, index) }
+                }
+            }
+            host.addView(chip)
+        }
+    }
 
     private data class CategoryOption(val title: String, val code: String, val badge: String = "")
 
@@ -365,10 +376,9 @@ class MainActivity : AppCompatActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         currentSourceIndex = 0
         adapter.setSelectedChannel(channel.key)
+        updateServerTabs()
 
-        if (enterFull) {
-            toggleFullscreen(true)
-        }
+        if (enterFull) requestLandscapeFullscreen()
         startStream(channel, 0)
     }
 
@@ -377,9 +387,11 @@ class MainActivity : AppCompatActivity() {
         val candidate = channel.sources.getOrNull(sourceIdx) ?: return
         mainHandler.removeCallbacks(bufferingTimeout)
 
+        updateServerTabs()
         binding.tvLiveLabel.text = "● LIVE • SEDANG MEMUAT"
         binding.tvWelcomeTitle.text = channel.name
-        binding.tvWelcomeDesc.text = "Sumber: ${candidate.sourceName}"
+        binding.tvWelcomeDesc.text = channel.programTitle?.takeIf { it.isNotBlank() }
+            ?: "Sumber: ${candidate.sourceName} • Info acara belum tersedia di playlist"
         binding.tvStatus.text = "Menghubungkan ke ${channel.name} (${sourceIdx + 1}/${channel.sources.size})..."
 
         releasePlayer()
@@ -593,69 +605,79 @@ class MainActivity : AppCompatActivity() {
     private fun stopPlayback() {
         releasePlayer()
         currentChannel = null
-        if (isFullscreen) toggleFullscreen(false)
+        if (isFullscreen) {
+            setFullscreenUi(false)
+            if (!isAndroidTv) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         adapter.setSelectedChannel(null)
+        updateServerTabs()
         binding.tvLiveLabel.text = "● NUSA TV • SIAP MENONTON"
         binding.tvWelcomeTitle.text = "Pilih channel"
-        binding.tvWelcomeDesc.text = "Pilih channel dengan sentuhan atau tombol OK pada remote TV."
+        binding.tvWelcomeDesc.text = "Pilih channel untuk mulai menonton."
         binding.tvStatus.text = "Pemutaran dihentikan."
     }
 
-    private fun toggleFullscreen(enable: Boolean) {
-        isFullscreen = enable
-        if (!isAndroidTv) {
-            requestedOrientation = if (enable) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+    private fun requestLandscapeFullscreen() {
+        if (isAndroidTv) {
+            setFullscreenUi(true)
+            return
         }
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        setFullscreenUi(true)
+    }
+
+    private fun setFullscreenUi(enable: Boolean) {
+        if (isAndroidTv && !enable) return
+        isFullscreen = enable
         if (enable) {
             binding.headerBar.visibility = View.GONE
             binding.welcomePanel.visibility = View.GONE
             binding.statsBar.visibility = View.GONE
             binding.rvChannels.visibility = View.GONE
-
-            binding.heroSection?.let { hero ->
-                val params = hero.layoutParams
-                params.height = android.view.ViewGroup.LayoutParams.MATCH_PARENT
-                hero.layoutParams = params
-                hero.setPadding(0, 0, 0, 0)
+            binding.playerContainer.layoutParams = binding.playerContainer.layoutParams.apply {
+                height = android.view.ViewGroup.LayoutParams.MATCH_PARENT
             }
-            val playerParams = binding.playerContainer.layoutParams
-            playerParams.height = android.view.ViewGroup.LayoutParams.MATCH_PARENT
-            binding.playerContainer.layoutParams = playerParams
-            binding.playerContainer.requestFocus()
+            window.decorView.systemUiVisibility = (
+                View.SYSTEM_UI_FLAG_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            )
         } else {
             binding.headerBar.visibility = View.VISIBLE
             binding.welcomePanel.visibility = View.VISIBLE
             binding.statsBar.visibility = View.VISIBLE
             binding.rvChannels.visibility = View.VISIBLE
-
             val density = resources.displayMetrics.density
-            binding.heroSection?.let { hero ->
-                val params = hero.layoutParams
-                params.height = if (isAndroidTv) (230 * density).toInt()
-                    else android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-                hero.layoutParams = params
-                val padH = ((if (isAndroidTv) 24 else 12) * density).toInt()
-                val padT = ((if (isAndroidTv) 12 else 10) * density).toInt()
-                hero.setPadding(padH, padT, padH, 0)
+            binding.playerContainer.layoutParams = binding.playerContainer.layoutParams.apply {
+                height = (210 * density).toInt()
             }
-            val playerParams = binding.playerContainer.layoutParams
-            playerParams.height = if (isAndroidTv) android.view.ViewGroup.LayoutParams.MATCH_PARENT
-                else (190 * density).toInt()
-            binding.playerContainer.layoutParams = playerParams
-            binding.rvChannels.requestFocus()
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        }
+    }
+
+    private fun toggleFullscreen(enable: Boolean) {
+        if (enable) requestLandscapeFullscreen() else {
+            if (!isAndroidTv) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            setFullscreenUi(false)
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (isAndroidTv) return
+        val landscape = newConfig.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        setFullscreenUi(landscape)
+        // Once landscape has been reached, release the temporary lock so the
+        // user can rotate back to portrait and automatically see the channel list.
+        if (landscape && requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
 
     private fun changeChannel(step: Int): Boolean {
-        val query = binding.etSearch.text.toString().trim().lowercase()
-        val visible = allChannels.filter { channel ->
-            val categoryMatches = selectedCategory == "Semua" || channelMatchesCategory(channel, selectedCategory)
-            val queryMatches = query.isEmpty() || channel.name.lowercase().contains(query) ||
-                channel.categories.any { it.lowercase().contains(query) }
-            categoryMatches && queryMatches
-        }
+        val visible = allChannels
         if (visible.isEmpty()) return false
         val currentIndex = visible.indexOfFirst { it.key == currentChannel?.key }
         val nextIndex = if (currentIndex < 0) 0 else (currentIndex + step + visible.size) % visible.size
@@ -665,7 +687,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK && isFullscreen) {
-            toggleFullscreen(false)
+            if (!isAndroidTv) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            setFullscreenUi(false)
             return true
         }
         if (isAndroidTv && (keyCode == KeyEvent.KEYCODE_CHANNEL_UP ||

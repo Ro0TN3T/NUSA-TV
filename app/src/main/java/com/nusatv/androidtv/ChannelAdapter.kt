@@ -49,7 +49,8 @@ class ChannelAdapter(
         fun bind(channel: TvChannel, isSelected: Boolean) {
             itemView.isSelected = isSelected
             tvName.text = channel.name
-            tvMeta.text = "${channel.country} • ${channel.sources.size} sumber"
+            tvMeta.text = channel.programTitle?.takeIf { it.isNotBlank() }
+                ?: "${channel.country} • ${channel.sources.size} server"
 
             badgeMulti.visibility = if (channel.sources.size > 1) View.VISIBLE else View.GONE
             badgeNative.visibility = if (channel.sources.any { it.requiresCustomHeader }) View.VISIBLE else View.GONE

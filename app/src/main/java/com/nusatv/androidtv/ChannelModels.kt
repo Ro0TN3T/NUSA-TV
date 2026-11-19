@@ -27,7 +27,8 @@ data class TvChannel(
     val country: String,
     val categories: List<String>,
     val sources: MutableList<StreamCandidate>,
-    val isNational: Boolean
+    val isNational: Boolean,
+    val programTitle: String? = null
 )
 
 object DefaultSources {
