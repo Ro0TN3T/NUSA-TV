@@ -68,7 +68,8 @@ class ChannelAdapter(
                 ivLogo.visibility = View.VISIBLE
                 tvFallback.visibility = View.GONE
                 ivLogo.load(channel.logo) {
-                    crossfade(true)
+                    crossfade(false)
+                    size(96, 96)
                     listener(
                         onError = { _, _ ->
                             ivLogo.visibility = View.GONE

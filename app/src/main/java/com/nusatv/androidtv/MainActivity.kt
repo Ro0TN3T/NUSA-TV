@@ -58,6 +58,7 @@ class MainActivity : AppCompatActivity() {
     private var transientRetryCount = 0
     private var isTryingFallback = false
     private var playbackGeneration = 0
+    private var isRefreshingEpg = false
     private val mainHandler = Handler(Looper.getMainLooper())
     private val bufferingTimeout = Runnable {
         if (player?.playbackState == Player.STATE_BUFFERING) {
@@ -67,7 +68,7 @@ class MainActivity : AppCompatActivity() {
     private val epgRefreshRunnable = object : Runnable {
         override fun run() {
             refreshEpg()
-            mainHandler.postDelayed(this, 5 * 60 * 1000L)
+            mainHandler.postDelayed(this, 30 * 60 * 1000L)
         }
     }
 
@@ -84,7 +85,7 @@ class MainActivity : AppCompatActivity() {
 
         allChannels = ChannelCache.channels
         refreshEpg()
-        mainHandler.postDelayed(epgRefreshRunnable, 5 * 60 * 1000L)
+        mainHandler.postDelayed(epgRefreshRunnable, 30 * 60 * 1000L)
         if (allChannels.isEmpty()) {
             reloadPlaylists()
         } else {
@@ -95,6 +96,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupRecyclerView() {
+        binding.rvChannels.setHasFixedSize(true)
+        binding.rvChannels.itemAnimator = null
+        binding.rvChannels.setItemViewCacheSize(4)
         adapter = ChannelAdapter { channel ->
             // Selecting a channel changes the stream in the embedded player only.
             playChannel(channel, enterFull = false)
@@ -166,6 +170,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshEpg() {
+        if (isRefreshingEpg || isFinishing || isDestroyed) return
+        isRefreshingEpg = true
         lifecycleScope.launch {
             try {
                 val schedules = EpgRepository.loadSchedules()
@@ -186,6 +192,8 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Exception) {
                 // EPG is optional: live playback and channel list remain available.
                 binding.tvStatus.text = "Jadwal EPG belum tersedia • Siaran tetap berjalan"
+            } finally {
+                isRefreshingEpg = false
             }
         }
     }
@@ -245,132 +253,43 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private data class CategoryOption(val title: String, val code: String, val badge: String = "")
-
     private fun showCategoryDialog() {
-        val options = listOf(
-            CategoryOption("Semua Channel", "ALL"),
-            CategoryOption("Events", "EV", "LIVE"),
-            CategoryOption("Indonesia", "IN"),
-            CategoryOption("Kids", "KI"),
-            CategoryOption("Knowledge", "KN"),
-            CategoryOption("Premium Movie", "BL"),
-            CategoryOption("Religi", "RE"),
-            CategoryOption("Sports", "SP"),
-            CategoryOption("News", "NE")
+        // Use the platform's lightweight single-choice dialog. The previous custom
+        // nested row layout could lose click/focus handling on some Android devices.
+        val labels = arrayOf(
+            "Semua Channel",
+            "Events Live • XMLTV",
+            "Indonesia",
+            "Kids",
+            "Knowledge",
+            "Premium Movie",
+            "Religi",
+            "Sports",
+            "News"
         )
-
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(12), dp(18), dp(12))
-            background = rounded("#151824", "#30364D", 22)
-        }
-        val title = TextView(this).apply {
-            text = "Pilih Kategori"
-            setTextColor(Color.WHITE)
-            textSize = 22f
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(dp(8), dp(8), dp(8), dp(14))
-        }
-        panel.addView(title)
-
-        options.forEach { option ->
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                minimumHeight = dp(50)
-                setPadding(dp(8), 0, dp(8), 0)
-                background = if (selectedCategory == option.title.substringBefore(" •") ||
-                    (option.code == "ALL" && selectedCategory == "Semua")) rounded("#19243A", "#16D7EA", 18)
-                    else rounded("#171A28", "#292E43", 18)
-                isClickable = true
-                isFocusable = true
-            }
-            val label = TextView(this).apply {
-                text = option.title
-                setTextColor(Color.WHITE)
-                textSize = 17f
-                typeface = Typeface.DEFAULT_BOLD
-                layoutParams = LinearLayout.LayoutParams(0, dp(50), 1f)
-                gravity = Gravity.CENTER_VERTICAL
-            }
-            row.addView(label)
-            if (option.badge.isNotEmpty()) {
-                val badge = TextView(this).apply {
-                    text = option.badge
-                    setTextColor(Color.WHITE)
-                    textSize = 13f
-                    typeface = Typeface.DEFAULT_BOLD
-                    gravity = Gravity.CENTER
-                    setPadding(dp(12), dp(5), dp(12), dp(5))
-                    background = rounded("#F32135", "#F32135", 18)
-                }
-                row.addView(badge)
-            } else {
-                val code = TextView(this).apply {
-                    text = option.code
-                    setTextColor(Color.rgb(145, 164, 188))
-                    textSize = 14f
-                    typeface = Typeface.DEFAULT_BOLD
-                    gravity = Gravity.CENTER
-                    minWidth = dp(36)
-                }
-                row.addView(code)
-            }
-            row.setOnClickListener {
-                selectedCategory = when (option.code) {
-                    "ALL" -> "Semua"
-                    "EV" -> "Events"
-                    "IN" -> "Indonesia"
-                    "SP" -> "Sports"
-                    "KI" -> "Kids"
-                    "BL" -> "Premium Movie"
-                    "KN" -> "Knowledge"
-                    "RE" -> "Religi"
-                    else -> "News"
-                }
-                categoryDialog?.dismiss()
+        val values = arrayOf(
+            "Semua", "Events", "Indonesia", "Kids", "Knowledge",
+            "Premium Movie", "Religi", "Sports", "News"
+        )
+        val selectedIndex = values.indexOf(selectedCategory).coerceAtLeast(0)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Pilih Kategori")
+            .setSingleChoiceItems(labels, selectedIndex) { dialogInterface, which ->
+                selectedCategory = values[which]
+                dialogInterface.dismiss()
                 applyFilter()
             }
-            panel.addView(row)
-        }
-
-        val cancel = TextView(this).apply {
-            text = "Batal"
-            setTextColor(Color.WHITE)
-            textSize = 16f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            setPadding(dp(26), dp(12), dp(26), dp(12))
-            background = rounded("#202437", "#30364D", 28)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, dp(48)
-            ).apply {
-                gravity = Gravity.END
-                topMargin = dp(14)
-                rightMargin = dp(4)
-            }
-            setOnClickListener { categoryDialog?.dismiss() }
-        }
-        panel.addView(cancel)
-
-        categoryDialog = AlertDialog.Builder(this)
-            .setView(panel)
+            .setNegativeButton("Batal", null)
             .create()
-        categoryDialog?.setOnShowListener {
-            categoryDialog?.window?.setBackgroundDrawableResource(android.R.color.transparent)
-            categoryDialog?.window?.setLayout(
+        categoryDialog = dialog
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+            dialog.window?.setLayout(
                 (resources.displayMetrics.widthPixels * 0.88f).toInt(),
                 WindowManager.LayoutParams.WRAP_CONTENT
             )
-            categoryDialog?.window?.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-            categoryDialog?.window?.let { dialogWindow ->
-                val params = dialogWindow.attributes
-                params.dimAmount = 0.68f
-                dialogWindow.attributes = params
-            }
         }
-        categoryDialog?.show()
+        dialog.show()
     }
 
     private fun channelMatchesCategory(channel: TvChannel, category: String): Boolean {
@@ -380,7 +299,10 @@ class MainActivity : AppCompatActivity() {
         return when (category) {
             "Indonesia" -> channel.country.equals("Indonesia", true) ||
                 text.contains("indonesia") || text.contains("nasional")
-            "Events" -> text.contains("event") || text.contains("live event")
+            // Events Live also includes channels identified by the XMLTV feed.
+            "Events" -> text.contains("event") || text.contains("live event") ||
+                !channel.currentProgramTitle.isNullOrBlank() ||
+                !channel.nextProgramTitle.isNullOrBlank()
             "Sports" -> listOf("sport", "sports", "olahraga", "football", "soccer", "bola").any { text.contains(it) }
             "Kids" -> listOf("kids", "kid", "anak", "children", "cartoon", "animation", "kartun").any { text.contains(it) }
             "Premium Movie" -> listOf("movie", "movies", "film", "cinema", "blockbuster", "premium").any { text.contains(it) }

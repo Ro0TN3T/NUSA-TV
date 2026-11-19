@@ -7,18 +7,11 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.xmlpull.v1.XmlPullParser
 import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
-data class EpgProgram(
-    val channelId: String,
-    val title: String,
-    val startMillis: Long,
-    val stopMillis: Long
-)
-
+/** Minimal in-memory XMLTV schedule: retain only current and next title per channel. */
 data class EpgSchedule(
     val current: String?,
     val next: String?
@@ -26,8 +19,9 @@ data class EpgSchedule(
 
 object EpgRepository {
     private val client = OkHttpClient.Builder()
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(45, TimeUnit.SECONDS)
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(12, TimeUnit.SECONDS)
+        .callTimeout(20, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
 
@@ -43,11 +37,14 @@ object EpgRepository {
             val body = response.body ?: error("XMLTV kosong")
             val parser = Xml.newPullParser()
             parser.setInput(body.charStream())
-            val programs = mutableMapOf<String, MutableList<EpgProgram>>()
+            val now = System.currentTimeMillis()
+            data class MutableSchedule(var current: Pair<Long, String>? = null, var next: Pair<Long, String>? = null)
+            val schedules = HashMap<String, MutableSchedule>()
+
             var event = parser.eventType
             while (event != XmlPullParser.END_DOCUMENT) {
                 if (event == XmlPullParser.START_TAG && parser.name.equals("programme", true)) {
-                    val channel = parser.getAttributeValue(null, "channel").orEmpty()
+                    val channelId = parser.getAttributeValue(null, "channel").orEmpty()
                     val start = parseXmltvDate(parser.getAttributeValue(null, "start"))
                     val stop = parseXmltvDate(parser.getAttributeValue(null, "stop"))
                     var title = ""
@@ -58,26 +55,29 @@ object EpgRepository {
                                 depth++
                                 if (depth == 2 && parser.name.equals("title", true) && title.isBlank()) {
                                     title = parser.nextText().trim()
-                                    depth--
+                                    depth-- // nextText consumes the matching title end tag
                                 }
                             }
                             XmlPullParser.END_TAG -> depth--
-                            XmlPullParser.END_DOCUMENT -> break
+                            XmlPullParser.END_DOCUMENT -> depth = 0
                         }
                     }
-                    if (channel.isNotBlank() && title.isNotBlank() && start > 0L && stop > start) {
-                        programs.getOrPut(channel) { mutableListOf() }
-                            .add(EpgProgram(channel, title, start, stop))
+                    if (channelId.isNotBlank() && title.isNotBlank() && start > 0L && stop > start) {
+                        val item = schedules.getOrPut(channelId) { MutableSchedule() }
+                        when {
+                            now >= start && now < stop -> {
+                                if (item.current == null || start > item.current!!.first) item.current = start to title
+                            }
+                            start > now -> {
+                                if (item.next == null || start < item.next!!.first) item.next = start to title
+                            }
+                        }
                     }
                 }
                 event = parser.next()
             }
-            val now = System.currentTimeMillis()
-            programs.mapValues { (_, entries) ->
-                val ordered = entries.sortedBy { it.startMillis }
-                val current = ordered.firstOrNull { now >= it.startMillis && now < it.stopMillis }
-                val next = ordered.firstOrNull { it.startMillis > now }
-                EpgSchedule(current?.title, next?.title)
+            schedules.mapValues { (_, value) ->
+                EpgSchedule(value.current?.second, value.next?.second)
             }
         }
     }
