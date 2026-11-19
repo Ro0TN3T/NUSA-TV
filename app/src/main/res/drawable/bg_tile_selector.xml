@@ -1,12 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_focused="true">
-        <shape android:shape="rectangle"><gradient android:angle="0" android:startColor="#1B253C" android:endColor="#18243A"/><stroke android:width="2dp" android:color="#16D7EA"/><corners android:radius="20dp"/></shape>
-    </item>
+    <!-- Selected channel: the only state that receives the cyan border. -->
     <item android:state_selected="true">
-        <shape android:shape="rectangle"><solid android:color="#19243A"/><stroke android:width="2dp" android:color="#16D7EA"/><corners android:radius="20dp"/></shape>
+        <shape android:shape="rectangle">
+            <solid android:color="#19243A" />
+            <stroke android:width="1.5dp" android:color="#16D7EA" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+    <!-- Focus is kept visible with a subtle fill, not a second cyan outline. -->
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#1B253C" />
+            <stroke android:width="1dp" android:color="#30384D" />
+            <corners android:radius="20dp" />
+        </shape>
     </item>
     <item>
-        <shape android:shape="rectangle"><solid android:color="#141725"/><stroke android:width="1dp" android:color="#242A3D"/><corners android:radius="20dp"/></shape>
+        <shape android:shape="rectangle">
+            <solid android:color="#141725" />
+            <stroke android:width="1dp" android:color="#242A3D" />
+            <corners android:radius="20dp" />
+        </shape>
     </item>
 </selector>

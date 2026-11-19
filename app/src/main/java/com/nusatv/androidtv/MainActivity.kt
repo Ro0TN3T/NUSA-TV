@@ -98,6 +98,11 @@ class MainActivity : AppCompatActivity() {
     private fun setupControls() {
         binding.btnFilterIndo.visibility = View.VISIBLE
         binding.btnFilterIndo.text = "$selectedCategory ▼"
+
+        // Keep the channel list directly under the server tabs on phone and TV.
+        // Playback status and channel-count banners are intentionally hidden.
+        binding.welcomePanel.visibility = View.GONE
+        binding.statsBar.visibility = View.GONE
         binding.btnFilterIndo.setOnClickListener { showCategoryDialog() }
         binding.btnFullscreen.visibility = View.GONE
         binding.etSearch.visibility = View.GONE
@@ -639,8 +644,8 @@ class MainActivity : AppCompatActivity() {
             )
         } else {
             binding.headerBar.visibility = View.VISIBLE
-            binding.welcomePanel.visibility = View.VISIBLE
-            binding.statsBar.visibility = View.VISIBLE
+            binding.welcomePanel.visibility = View.GONE
+            binding.statsBar.visibility = View.GONE
             binding.rvChannels.visibility = View.VISIBLE
             val density = resources.displayMetrics.density
             binding.playerContainer.layoutParams = binding.playerContainer.layoutParams.apply {
