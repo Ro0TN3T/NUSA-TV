@@ -15,6 +15,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import android.view.WindowManager
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -25,6 +26,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.recyclerview.widget.GridLayoutManager
@@ -420,7 +422,9 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
-                    tryNextSource(error.errorCodeName)
+                    val detail = formatPlaybackError(error)
+                    Log.e("NUSA-TV-PLAYER", "Playback failed: channel=${channel.name}, source=${candidate.sourceName}, host=${runCatching { java.net.URI(candidate.url).host }.getOrNull()}, detail=$detail", error)
+                    tryNextSource(detail)
                 }
             })
             prepare()
@@ -430,6 +434,35 @@ class MainActivity : AppCompatActivity() {
         binding.playerView.player = exoPlayer
     }
 
+    /** Convert Media3/HTTP failures into a useful, privacy-safe diagnostic message. */
+    private fun formatPlaybackError(error: PlaybackException): String {
+        var current: Throwable? = error
+        var httpCode: Int? = null
+        var httpMessage: String? = null
+        var deepestMessage: String? = null
+        val visited = HashSet<Throwable>()
+
+        while (current != null && visited.add(current)) {
+            if (!current.message.isNullOrBlank()) deepestMessage = current.message
+            when (current) {
+                is HttpDataSource.InvalidResponseCodeException -> {
+                    httpCode = current.responseCode
+                    httpMessage = current.message
+                }
+            }
+            current = current.cause
+        }
+
+        val detail = when {
+            httpCode != null -> "HTTP $httpCode${httpMessage?.let { ": $it" } ?: ""}"
+            deepestMessage?.contains("UnknownHost", true) == true -> "DNS / domain tidak ditemukan"
+            deepestMessage?.contains("timeout", true) == true -> "Koneksi timeout"
+            deepestMessage?.contains("Cleartext", true) == true -> "HTTP tidak aman diblokir Android"
+            else -> deepestMessage?.take(180) ?: error.errorCodeName
+        }
+        return "${error.errorCodeName}: $detail"
+    }
+
     private fun tryNextSource(reason: String) {
         val ch = currentChannel ?: return
         if (currentSourceIndex + 1 < ch.sources.size) {
@@ -437,8 +470,8 @@ class MainActivity : AppCompatActivity() {
             binding.tvStatus.text = "Gagal ($reason). Mencoba link ${currentSourceIndex + 1}/${ch.sources.size}..."
             startStream(ch, currentSourceIndex)
         } else {
-            binding.tvLiveLabel.text = "● OFFLINE SEMENTARA"
-            binding.tvStatus.text = "Semua sumber ${ch.name} sedang offline ($reason)."
+            binding.tvLiveLabel.text = "● GAGAL DIPUTAR"
+            binding.tvStatus.text = "Gagal memutar ${ch.name}. Detail: $reason. Periksa koneksi atau coba lagi."
             if (isFullscreen) {
                 toggleFullscreen(false)
             }
