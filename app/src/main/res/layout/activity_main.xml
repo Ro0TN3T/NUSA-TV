@@ -41,22 +41,13 @@
             android:contentDescription="NUSA TV"
             android:scaleType="fitCenter"
             android:src="@drawable/nusa_tv_logo" />
-        <HorizontalScrollView
+        <View
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:scrollbars="none"
-            android:fillViewport="false">
-            <LinearLayout
-                android:id="@+id/serverTabs"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal" />
-        </HorizontalScrollView>
+            android:layout_height="1dp"
+            android:layout_weight="1" />
         <Button
             android:id="@+id/btnFilterIndo"
-            android:visibility="gone"
+            android:visibility="visible"
             android:layout_width="wrap_content"
             android:layout_height="44dp"
             android:backgroundTint="#1762D7"
@@ -104,6 +95,24 @@
             android:textColor="#FFFFFF"
             android:textSize="20sp" />
     </LinearLayout>
+
+    <!-- Server choices are intentionally placed below the main toolbar -->
+    <HorizontalScrollView
+        android:id="@+id/serverTabsScroll"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="#141622"
+        android:fillViewport="false"
+        android:scrollbars="none"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp">
+        <LinearLayout
+            android:id="@+id/serverTabs"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal" />
+    </HorizontalScrollView>
 
     <!-- Search and category shortcuts -->
     <EditText

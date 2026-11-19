@@ -96,7 +96,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupControls() {
-        binding.btnFilterIndo.visibility = View.GONE
+        binding.btnFilterIndo.visibility = View.VISIBLE
+        binding.btnFilterIndo.text = "$selectedCategory ▼"
+        binding.btnFilterIndo.setOnClickListener { showCategoryDialog() }
         binding.btnFullscreen.visibility = View.GONE
         binding.etSearch.visibility = View.GONE
         binding.btnFullscreen.setOnClickListener { requestLandscapeFullscreen() }
@@ -150,11 +152,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyFilter() {
-        adapter.submitList(allChannels, currentChannel?.key)
-        binding.tvStats.text = "${allChannels.size} channel"
-        binding.tvSectionTitle.text = "Daftar Channel"
+        val filteredChannels = when (selectedCategory) {
+            "Semua" -> allChannels
+            else -> allChannels.filter { channelMatchesCategory(it, selectedCategory) }
+        }
+        adapter.submitList(filteredChannels, currentChannel?.key)
+        binding.tvStats.text = "${filteredChannels.size} channel"
+        binding.tvSectionTitle.text = if (selectedCategory == "Semua") "Daftar Channel" else selectedCategory
+        binding.btnFilterIndo.text = "$selectedCategory ▼"
         updateServerTabs()
-        if (isAndroidTv && !isFullscreen && allChannels.isNotEmpty()) {
+        if (isAndroidTv && !isFullscreen && filteredChannels.isNotEmpty()) {
             binding.rvChannels.post {
                 if (!binding.rvChannels.hasFocus()) {
                     binding.rvChannels.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
@@ -206,11 +213,12 @@ class MainActivity : AppCompatActivity() {
             CategoryOption("Semua Channel", "ALL"),
             CategoryOption("Events", "EV", "LIVE"),
             CategoryOption("Indonesia", "IN"),
-            CategoryOption("Sports", "SP"),
-            CategoryOption("Kids • TV Anak", "KI"),
-            CategoryOption("Blockbuster", "BL"),
+            CategoryOption("Kids", "KI"),
             CategoryOption("Knowledge", "KN"),
-            CategoryOption("News • Berita TV", "NE")
+            CategoryOption("Premium Movie", "BL"),
+            CategoryOption("Religi", "RE"),
+            CategoryOption("Sports", "SP"),
+            CategoryOption("News", "NE")
         )
 
         val panel = LinearLayout(this).apply {
@@ -277,8 +285,9 @@ class MainActivity : AppCompatActivity() {
                     "IN" -> "Indonesia"
                     "SP" -> "Sports"
                     "KI" -> "Kids"
-                    "BL" -> "Blockbuster"
+                    "BL" -> "Premium Movie"
                     "KN" -> "Knowledge"
+                    "RE" -> "Religi"
                     else -> "News"
                 }
                 categoryDialog?.dismiss()
@@ -335,7 +344,8 @@ class MainActivity : AppCompatActivity() {
             "Events" -> text.contains("event") || text.contains("live event")
             "Sports" -> listOf("sport", "sports", "olahraga", "football", "soccer", "bola").any { text.contains(it) }
             "Kids" -> listOf("kids", "kid", "anak", "children", "cartoon", "animation", "kartun").any { text.contains(it) }
-            "Blockbuster" -> listOf("movie", "movies", "film", "cinema", "blockbuster").any { text.contains(it) }
+            "Premium Movie" -> listOf("movie", "movies", "film", "cinema", "blockbuster", "premium").any { text.contains(it) }
+            "Religi" -> listOf("religi", "religion", "islam", "muslim", "kristen", "rohani").any { text.contains(it) }
             "Knowledge" -> listOf("knowledge", "education", "documentary", "edukasi", "science", "sains").any { text.contains(it) }
             "News" -> listOf("news", "berita", "cnbc", "cnn", "inews", "metro tv", "tv one").any { text.contains(it) }
             else -> false
