@@ -121,12 +121,12 @@ object PlaylistRepository {
                 }
                 line.startsWith("#EXTVLCOPT:", ignoreCase = true) -> {
                     val opt = line.substringAfter(":")
-                    if (opt.startsWith("http-referrer=", true)) {
-                        currentReferer = opt.substringAfter("=").trim()
+                    if (opt.startsWith("http-referrer=", true) || opt.startsWith("http-referer=", true)) {
+                        currentReferer = cleanHeaderValue(opt.substringAfter("=").trim())
                     } else if (opt.startsWith("http-user-agent=", true)) {
-                        currentUserAgent = opt.substringAfter("=").trim()
+                        currentUserAgent = cleanHeaderValue(opt.substringAfter("=").trim())
                     } else if (opt.startsWith("http-origin=", true)) {
-                        currentOrigin = opt.substringAfter("=").trim()
+                        currentOrigin = cleanHeaderValue(opt.substringAfter("=").trim())
                     } else if (opt.startsWith("mimetype=", true)) {
                         currentMimeType = normalizeMimeType(opt.substringAfter("=").trim())
                     }
@@ -143,9 +143,9 @@ object PlaylistRepository {
                                     val headerName = URLDecoder.decode(pair.substring(0, eq), StandardCharsets.UTF_8.name()).trim()
                                     val headerValue = URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8.name()).trim()
                                     when (headerName.lowercase()) {
-                                        "user-agent" -> currentUserAgent = headerValue
-                                        "referer" -> currentReferer = headerValue
-                                        "origin" -> currentOrigin = headerValue
+                                        "user-agent" -> currentUserAgent = cleanHeaderValue(headerValue)
+                                        "referer", "referrer" -> currentReferer = cleanHeaderValue(headerValue)
+                                        "origin" -> currentOrigin = cleanHeaderValue(headerValue)
                                     }
                                 }
                             }
@@ -235,6 +235,15 @@ object PlaylistRepository {
             }
         }
         return out
+    }
+
+    /**
+     * M3U header directives may quote values. Strip only matching outer quotes and
+     * reject line breaks so malformed playlist text cannot inject extra headers.
+     */
+    private fun cleanHeaderValue(value: String): String? {
+        val cleaned = value.trim().removeSurrounding("\"").removeSurrounding("'").trim()
+        return cleaned.takeIf { it.isNotEmpty() && '\r' !in it && '\n' !in it }
     }
 
     private fun extractAttr(attrs: String, key: String): String {

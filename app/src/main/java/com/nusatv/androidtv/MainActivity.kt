@@ -28,10 +28,14 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.source.LoadEventInfo
+import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.recyclerview.widget.GridLayoutManager
 import com.nusatv.androidtv.databinding.ActivityMainBinding
 import kotlinx.coroutines.launch
+import java.io.IOException
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -361,23 +365,26 @@ class MainActivity : AppCompatActivity() {
 
         releasePlayer()
 
-        val headersMap = mutableMapOf<String, String>()
-        headersMap["User-Agent"] = candidate.userAgent
-        candidate.referer?.let { headersMap["Referer"] = it }
-        candidate.origin?.let { headersMap["Origin"] = it }
+        // These properties are attached to the OkHttp-backed Media3 DataSource.
+        // HLS uses the same factory for the master/media playlists and media segments.
+        val headersMap = linkedMapOf<String, String>()
+        candidate.userAgent.takeIf { it.isNotBlank() }?.let { headersMap["User-Agent"] = it }
+        candidate.referer?.takeIf { it.isNotBlank() }?.let { headersMap["Referer"] = it }
+        candidate.origin?.takeIf { it.isNotBlank() }?.let { headersMap["Origin"] = it }
 
         val okHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .followRedirects(true)
+            .followSslRedirects(true)
+            .retryOnConnectionFailure(true)
             .build()
 
         val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
             .setDefaultRequestProperties(headersMap)
 
-        // DefaultMediaSourceFactory memilih HLS, DASH, atau progressive
-        // berdasarkan URI/MIME type MediaItem. Header diterapkan ke manifest,
-        // segment, dan request media melalui OkHttpDataSource.
+        // The factory is shared by HLS manifest, variant playlist, key (when permitted),
+        // and media-segment requests. OkHttp follows HTTP and HTTPS redirects.
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(dataSourceFactory)
 
@@ -398,63 +405,118 @@ class MainActivity : AppCompatActivity() {
             mediaItemBuilder.setDrmConfiguration(drmBuilder.build())
         }
         val mediaItem = mediaItemBuilder.build()
+        var lastLoadFailure: String? = null
 
         val exoPlayer = ExoPlayer.Builder(this)
             .setMediaSourceFactory(mediaSourceFactory)
             .build().apply {
-            setMediaItem(mediaItem)
-            playWhenReady = true
-            addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    when (playbackState) {
-                        Player.STATE_READY -> {
-                            binding.tvLiveLabel.text = "● LIVE • SEDANG DIPUTAR"
-                            binding.tvStatus.text = "LIVE • ${candidate.sourceName}"
-                        }
-                        Player.STATE_BUFFERING -> {
-                            binding.tvStatus.text = "Buffering ${channel.name}..."
-                        }
-                        Player.STATE_ENDED -> {
-                            tryNextSource("Siaran berakhir")
-                        }
-                        else -> Unit
-                    }
-                }
+                setMediaItem(mediaItem)
+                playWhenReady = true
 
-                override fun onPlayerError(error: PlaybackException) {
-                    val detail = formatPlaybackError(error)
-                    Log.e("NUSA-TV-PLAYER", "Playback failed: channel=${channel.name}, source=${candidate.sourceName}, host=${runCatching { java.net.URI(candidate.url).host }.getOrNull()}, detail=$detail", error)
-                    tryNextSource(detail)
-                }
-            })
-            prepare()
-        }
+                // Record the exact class of failed request: HLS manifest vs media segment.
+                addAnalyticsListener(object : AnalyticsListener {
+                    override fun onLoadError(
+                        eventTime: AnalyticsListener.EventTime,
+                        loadEventInfo: LoadEventInfo,
+                        mediaLoadData: MediaLoadData,
+                        error: IOException,
+                        wasCanceled: Boolean
+                    ) {
+                        val requestType = when (mediaLoadData.dataType) {
+                            C.DATA_TYPE_MANIFEST -> "playlist/manifest"
+                            C.DATA_TYPE_MEDIA -> "segmen video"
+                            C.DATA_TYPE_DRM -> "permintaan DRM"
+                            else -> "request media (tipe ${mediaLoadData.dataType})"
+                        }
+                        val requestUri = loadEventInfo.dataSpec.uri
+                        val requestHost = requestUri.host ?: "host tidak diketahui"
+                        val httpFailure = findHttpFailure(error)
+                        val failureText = buildString {
+                            append(requestType)
+                            if (httpFailure != null) {
+                                append(" HTTP ${httpFailure.first}")
+                                if (!httpFailure.second.isNullOrBlank()) append(": ${httpFailure.second}")
+                            } else {
+                                append(": ${error.message ?: error.javaClass.simpleName}")
+                            }
+                            append(" [")
+                            append(requestHost)
+                            append("]")
+                        }
+                        if (!wasCanceled) {
+                            lastLoadFailure = failureText
+                        }
+                        Log.e(
+                            "NUSA-TV-LOAD",
+                            "Load failed: channel=${channel.name}, source=${candidate.sourceName}, type=$requestType, host=$requestHost, canceled=$wasCanceled",
+                            error
+                        )
+                    }
+                })
+
+                addListener(object : Player.Listener {
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        when (playbackState) {
+                            Player.STATE_READY -> {
+                                binding.tvLiveLabel.text = "● LIVE • SEDANG DIPUTAR"
+                                binding.tvStatus.text = "LIVE • ${candidate.sourceName}"
+                            }
+                            Player.STATE_BUFFERING -> {
+                                binding.tvStatus.text = "Buffering ${channel.name}..."
+                            }
+                            Player.STATE_ENDED -> {
+                                tryNextSource("Siaran berakhir")
+                            }
+                            else -> Unit
+                        }
+                    }
+
+                    override fun onPlayerError(error: PlaybackException) {
+                        val detail = formatPlaybackError(error, lastLoadFailure)
+                        Log.e(
+                            "NUSA-TV-PLAYER",
+                            "Playback failed: channel=${channel.name}, source=${candidate.sourceName}, " +
+                                "host=${runCatching { java.net.URI(candidate.url).host }.getOrNull()}, detail=$detail",
+                            error
+                        )
+                        tryNextSource(detail)
+                    }
+                })
+                prepare()
+            }
 
         player = exoPlayer
         binding.playerView.player = exoPlayer
     }
 
-    /** Convert Media3/HTTP failures into a useful, privacy-safe diagnostic message. */
-    private fun formatPlaybackError(error: PlaybackException): String {
+    /** Find an HTTP response code anywhere in the wrapped Media3/OkHttp exception chain. */
+    private fun findHttpFailure(error: Throwable): Pair<Int, String?>? {
         var current: Throwable? = error
-        var httpCode: Int? = null
-        var httpMessage: String? = null
+        val visited = HashSet<Throwable>()
+        while (current != null && visited.add(current)) {
+            if (current is HttpDataSource.InvalidResponseCodeException) {
+                return current.responseCode to current.message
+            }
+            current = current.cause
+        }
+        return null
+    }
+
+    /** Convert Media3/HTTP failures into useful diagnostics without exposing URL query tokens. */
+    private fun formatPlaybackError(error: PlaybackException, lastLoadFailure: String?): String {
+        var current: Throwable? = error
         var deepestMessage: String? = null
         val visited = HashSet<Throwable>()
 
         while (current != null && visited.add(current)) {
             if (!current.message.isNullOrBlank()) deepestMessage = current.message
-            when (current) {
-                is HttpDataSource.InvalidResponseCodeException -> {
-                    httpCode = current.responseCode
-                    httpMessage = current.message
-                }
-            }
             current = current.cause
         }
 
+        val httpFailure = findHttpFailure(error)
         val detail = when {
-            httpCode != null -> "HTTP $httpCode${httpMessage?.let { ": $it" } ?: ""}"
+            !lastLoadFailure.isNullOrBlank() -> lastLoadFailure
+            httpFailure != null -> "HTTP ${httpFailure.first}${httpFailure.second?.let { ": $it" } ?: ""}"
             deepestMessage?.contains("UnknownHost", true) == true -> "DNS / domain tidak ditemukan"
             deepestMessage?.contains("timeout", true) == true -> "Koneksi timeout"
             deepestMessage?.contains("Cleartext", true) == true -> "HTTP tidak aman diblokir Android"
