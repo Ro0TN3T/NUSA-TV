@@ -1,0 +1,4 @@
+#EXTM3U
+# NUSA TV playlist rebuilt from the two user-supplied FaaeTV playlist files.
+# Includes unique direct HLS URLs only. DRM, DASH, resolver, placeholder, and credentialed entries were excluded.
+# Stream availability and redistribution permissions have not been verified; publish only streams you are authorized to use.

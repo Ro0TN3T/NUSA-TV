@@ -1,6 +1,8 @@
 package com.nusatv.androidtv
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.content.pm.PackageManager
 import android.content.pm.ActivityInfo
 import android.text.Editable
@@ -52,6 +54,16 @@ class MainActivity : AppCompatActivity() {
     private var categoryDialog: AlertDialog? = null
     private var isFullscreen = false
     private var isAndroidTv = false
+    private var wasPlayingBeforeStop = false
+    private var transientRetryCount = 0
+    private var isTryingFallback = false
+    private var playbackGeneration = 0
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val bufferingTimeout = Runnable {
+        if (player?.playbackState == Player.STATE_BUFFERING) {
+            tryNextSource("Buffering timeout setelah 15 detik")
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -120,6 +132,8 @@ class MainActivity : AppCompatActivity() {
                 if (ch.sources.size > 1) {
                     currentSourceIndex = (currentSourceIndex + 1) % ch.sources.size
                 }
+                transientRetryCount = 0
+                isTryingFallback = false
                 startStream(ch, currentSourceIndex)
             }
         }
@@ -138,12 +152,16 @@ class MainActivity : AppCompatActivity() {
         binding.tvStatus.text = "Memperbarui playlist TV Nasional & global..."
         lifecycleScope.launch {
             try {
-                allChannels = PlaylistRepository.loadAllChannels()
+                allChannels = PlaylistRepository.loadAllChannels(this@MainActivity)
                 ChannelCache.channels = allChannels
                 applyFilter()
-                binding.tvStatus.text = "${allChannels.size} channel dimuat dari GitHub."
+                binding.tvStatus.text = "${allChannels.size} channel dimuat dari server NUSA TV."
+                if (currentChannel == null && allChannels.isNotEmpty()) {
+                    val first = allChannels.firstOrNull { it.country == "Indonesia" } ?: allChannels.first()
+                    playChannel(first, enterFull = false)
+                }
             } catch (error: Exception) {
-                binding.tvStatus.text = "Gagal memuat playlist GitHub. Periksa koneksi internet."
+                binding.tvStatus.text = "Gagal memuat playlist server. Periksa koneksi internet."
                 if (allChannels.isEmpty()) adapter.submitList(emptyList())
             } finally {
                 binding.btnReload.isEnabled = true
@@ -174,11 +192,9 @@ class MainActivity : AppCompatActivity() {
             else -> "$selectedCategory ▾"
         }
 
-        val activeTab = android.graphics.Color.parseColor("#0797C2")
-        val idleTab = android.graphics.Color.parseColor("#202A36")
-        binding.btnTabAll?.setBackgroundColor(if (selectedCategory == "Semua" || selectedCategory == "Indonesia") activeTab else idleTab)
-        binding.btnTabNews?.setBackgroundColor(if (selectedCategory == "News") activeTab else idleTab)
-        binding.btnTabKids?.setBackgroundColor(if (selectedCategory == "Kids") activeTab else idleTab)
+        binding.btnTabAll?.setBackgroundResource(if (selectedCategory == "Semua" || selectedCategory == "Indonesia") R.drawable.bg_tab_selected else R.drawable.bg_tab_idle)
+        binding.btnTabNews?.setBackgroundResource(if (selectedCategory == "News") R.drawable.bg_tab_selected else R.drawable.bg_tab_idle)
+        binding.btnTabKids?.setBackgroundResource(if (selectedCategory == "Kids") R.drawable.bg_tab_selected else R.drawable.bg_tab_idle)
         if (isAndroidTv && !isFullscreen && filtered.isNotEmpty()) {
             binding.rvChannels.post {
                 if (!binding.rvChannels.hasFocus()) {
@@ -206,7 +222,7 @@ class MainActivity : AppCompatActivity() {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(12), dp(18), dp(12))
-            background = rounded("#07182B", "#14549A", 22)
+            background = rounded("#151824", "#30364D", 22)
         }
         val title = TextView(this).apply {
             text = "Pilih Kategori"
@@ -224,8 +240,8 @@ class MainActivity : AppCompatActivity() {
                 minimumHeight = dp(50)
                 setPadding(dp(8), 0, dp(8), 0)
                 background = if (selectedCategory == option.title.substringBefore(" •") ||
-                    (option.code == "ALL" && selectedCategory == "Semua")) rounded("#183B5C", "#315B85", 8)
-                    else rounded("#0A1A2B", "#24384C", 0)
+                    (option.code == "ALL" && selectedCategory == "Semua")) rounded("#19243A", "#16D7EA", 18)
+                    else rounded("#171A28", "#292E43", 18)
                 isClickable = true
                 isFocusable = true
             }
@@ -279,12 +295,12 @@ class MainActivity : AppCompatActivity() {
 
         val cancel = TextView(this).apply {
             text = "Batal"
-            setTextColor(Color.BLACK)
+            setTextColor(Color.WHITE)
             textSize = 16f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             setPadding(dp(26), dp(12), dp(26), dp(12))
-            background = rounded("#FFFFFF", "#FFFFFF", 28)
+            background = rounded("#202437", "#30364D", 28)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, dp(48)
             ).apply {
@@ -344,6 +360,8 @@ class MainActivity : AppCompatActivity() {
     private fun playChannel(channel: TvChannel, enterFull: Boolean) {
         if (channel.sources.isEmpty()) return
         currentChannel = channel
+        transientRetryCount = 0
+        isTryingFallback = false
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         currentSourceIndex = 0
         adapter.setSelectedChannel(channel.key)
@@ -357,6 +375,7 @@ class MainActivity : AppCompatActivity() {
     @OptIn(UnstableApi::class)
     private fun startStream(channel: TvChannel, sourceIdx: Int) {
         val candidate = channel.sources.getOrNull(sourceIdx) ?: return
+        mainHandler.removeCallbacks(bufferingTimeout)
 
         binding.tvLiveLabel.text = "● LIVE • SEDANG MEMUAT"
         binding.tvWelcomeTitle.text = channel.name
@@ -364,6 +383,8 @@ class MainActivity : AppCompatActivity() {
         binding.tvStatus.text = "Menghubungkan ke ${channel.name} (${sourceIdx + 1}/${channel.sources.size})..."
 
         releasePlayer()
+        playbackGeneration += 1
+        val activeGeneration = playbackGeneration
 
         // These properties are attached to the OkHttp-backed Media3 DataSource.
         // HLS uses the same factory for the master/media playlists and media segments.
@@ -412,6 +433,7 @@ class MainActivity : AppCompatActivity() {
             .build().apply {
                 setMediaItem(mediaItem)
                 playWhenReady = true
+                volume = 1f
 
                 // Record the exact class of failed request: HLS manifest vs media segment.
                 addAnalyticsListener(object : AnalyticsListener {
@@ -456,13 +478,19 @@ class MainActivity : AppCompatActivity() {
 
                 addListener(object : Player.Listener {
                     override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (activeGeneration != playbackGeneration || currentChannel?.key != channel.key) return
                         when (playbackState) {
                             Player.STATE_READY -> {
+                                mainHandler.removeCallbacks(bufferingTimeout)
+                                transientRetryCount = 0
+                                isTryingFallback = false
                                 binding.tvLiveLabel.text = "● LIVE • SEDANG DIPUTAR"
                                 binding.tvStatus.text = "LIVE • ${candidate.sourceName}"
                             }
                             Player.STATE_BUFFERING -> {
                                 binding.tvStatus.text = "Buffering ${channel.name}..."
+                                mainHandler.removeCallbacks(bufferingTimeout)
+                                mainHandler.postDelayed(bufferingTimeout, 15_000L)
                             }
                             Player.STATE_ENDED -> {
                                 tryNextSource("Siaran berakhir")
@@ -472,6 +500,7 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
+                        if (activeGeneration != playbackGeneration || currentChannel?.key != channel.key) return
                         val detail = formatPlaybackError(error, lastLoadFailure)
                         Log.e(
                             "NUSA-TV-PLAYER",
@@ -515,34 +544,56 @@ class MainActivity : AppCompatActivity() {
 
         val httpFailure = findHttpFailure(error)
         val detail = when {
+            httpFailure?.first == 401 -> "HTTP 401: server meminta autentikasi atau token yang masih berlaku"
+            httpFailure?.first == 403 -> "HTTP 403: server menolak permintaan. Periksa izin sumber, masa berlaku link, dan header resmi dari penyedia"
+            httpFailure?.first == 404 -> "HTTP 404: alamat stream atau manifest tidak ditemukan"
+            httpFailure != null && httpFailure.first in 500..599 -> "HTTP ${httpFailure.first}: server sumber sedang bermasalah"
             !lastLoadFailure.isNullOrBlank() -> lastLoadFailure
             httpFailure != null -> "HTTP ${httpFailure.first}${httpFailure.second?.let { ": $it" } ?: ""}"
             deepestMessage?.contains("UnknownHost", true) == true -> "DNS / domain tidak ditemukan"
             deepestMessage?.contains("timeout", true) == true -> "Koneksi timeout"
             deepestMessage?.contains("Cleartext", true) == true -> "HTTP tidak aman diblokir Android"
+            deepestMessage?.contains("SSL", true) == true || deepestMessage?.contains("certificate", true) == true -> "Koneksi TLS/sertifikat gagal"
             else -> deepestMessage?.take(180) ?: error.errorCodeName
         }
         return "${error.errorCodeName}: $detail"
     }
 
     private fun tryNextSource(reason: String) {
-        val ch = currentChannel ?: return
+        if (isTryingFallback) return
+        isTryingFallback = true
+        val ch = currentChannel ?: run { isTryingFallback = false; return }
         if (currentSourceIndex + 1 < ch.sources.size) {
             currentSourceIndex++
-            binding.tvStatus.text = "Gagal ($reason). Mencoba link ${currentSourceIndex + 1}/${ch.sources.size}..."
+            transientRetryCount = 0
+            binding.tvStatus.text = "Sumber gagal. Beralih ke link ${currentSourceIndex + 1}/${ch.sources.size}..."
+            isTryingFallback = false
             startStream(ch, currentSourceIndex)
-        } else {
-            binding.tvLiveLabel.text = "● GAGAL DIPUTAR"
-            binding.tvStatus.text = "Gagal memutar ${ch.name}. Detail: $reason. Periksa koneksi atau coba lagi."
-            if (isFullscreen) {
-                toggleFullscreen(false)
+        } else if (transientRetryCount < 1 && isTransientFailure(reason)) {
+            transientRetryCount++
+            binding.tvStatus.text = "Koneksi terputus. Mencoba sambung ulang..."
+            lifecycleScope.launch {
+                kotlinx.coroutines.delay(1200)
+                isTryingFallback = false
+                if (currentChannel?.key == ch.key) startStream(ch, currentSourceIndex)
             }
+        } else {
+            isTryingFallback = false
+            binding.tvLiveLabel.text = "● GAGAL DIPUTAR"
+            binding.tvStatus.text = "Gagal memutar ${ch.name}. $reason. Coba link lain atau periksa akses sumber."
+            if (isFullscreen) toggleFullscreen(false)
         }
     }
+
+    private fun isTransientFailure(reason: String): Boolean =
+        reason.contains("timeout", true) || reason.contains("HTTP 5", true) ||
+            reason.contains("UnknownHost", true) || reason.contains("DNS", true) ||
+            reason.contains("connection", true) || reason.contains("I/O", true)
 
     private fun stopPlayback() {
         releasePlayer()
         currentChannel = null
+        if (isFullscreen) toggleFullscreen(false)
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         adapter.setSelectedChannel(null)
         binding.tvLiveLabel.text = "● NUSA TV • SIAP MENONTON"
@@ -597,22 +648,63 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun changeChannel(step: Int): Boolean {
+        val query = binding.etSearch.text.toString().trim().lowercase()
+        val visible = allChannels.filter { channel ->
+            val categoryMatches = selectedCategory == "Semua" || channelMatchesCategory(channel, selectedCategory)
+            val queryMatches = query.isEmpty() || channel.name.lowercase().contains(query) ||
+                channel.categories.any { it.lowercase().contains(query) }
+            categoryMatches && queryMatches
+        }
+        if (visible.isEmpty()) return false
+        val currentIndex = visible.indexOfFirst { it.key == currentChannel?.key }
+        val nextIndex = if (currentIndex < 0) 0 else (currentIndex + step + visible.size) % visible.size
+        playChannel(visible[nextIndex], enterFull = isFullscreen)
+        return true
+    }
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK && isFullscreen) {
             toggleFullscreen(false)
             return true
         }
+        if (isAndroidTv && (keyCode == KeyEvent.KEYCODE_CHANNEL_UP ||
+                (keyCode == KeyEvent.KEYCODE_DPAD_UP && (isFullscreen || binding.playerContainer.hasFocus())))) {
+            return changeChannel(-1) || super.onKeyDown(keyCode, event)
+        }
+        if (isAndroidTv && (keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN ||
+                (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && (isFullscreen || binding.playerContainer.hasFocus())))) {
+            return changeChannel(1) || super.onKeyDown(keyCode, event)
+        }
+        if (isAndroidTv && keyCode == KeyEvent.KEYCODE_MEDIA_PREVIOUS) return changeChannel(-1)
+        if (isAndroidTv && keyCode == KeyEvent.KEYCODE_MEDIA_NEXT) return changeChannel(1)
         return super.onKeyDown(keyCode, event)
     }
 
     private fun releasePlayer() {
+        mainHandler.removeCallbacks(bufferingTimeout)
         player?.release()
         player = null
         binding.playerView.player = null
     }
 
     override fun onStop() {
+        wasPlayingBeforeStop = player?.isPlaying == true || player?.playWhenReady == true
+        player?.pause()
         super.onStop()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (wasPlayingBeforeStop && player != null) {
+            player?.playWhenReady = true
+            player?.play()
+        }
+        wasPlayingBeforeStop = false
+    }
+
+    override fun onDestroy() {
         releasePlayer()
+        super.onDestroy()
     }
 }

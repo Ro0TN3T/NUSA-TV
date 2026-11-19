@@ -4,13 +4,14 @@
     android:id="@+id/rootLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#07101C"
+    android:background="#090A11"
     android:orientation="vertical">
 
+    <!-- Wide live player, matching the reference's top-first layout -->
     <FrameLayout
         android:id="@+id/playerContainer"
         android:layout_width="match_parent"
-        android:layout_height="130dp"
+        android:layout_height="218dp"
         android:background="#000000"
         android:clickable="true"
         android:focusable="true">
@@ -18,231 +19,144 @@
             android:id="@+id/playerView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            app:resize_mode="zoom"
+            app:resize_mode="fit"
             app:show_buffering="when_playing"
-            app:use_controller="true" />
+            app:use_controller="true"
+            />
     </FrameLayout>
 
+    <!-- Main toolbar -->
     <LinearLayout
         android:id="@+id/headerBar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="#102337"
+        android:layout_height="64dp"
+        android:background="#141622"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="16dp"
-        android:paddingEnd="12dp"
-        android:paddingTop="12dp"
-        android:paddingBottom="12dp">
-
+        android:paddingEnd="14dp">
         <ImageView
-            android:layout_width="112dp"
+            android:layout_width="108dp"
             android:layout_height="48dp"
-            android:contentDescription="@string/app_name"
-            android:scaleType="fitStart"
+            android:contentDescription="NUSA TV"
+            android:scaleType="fitCenter"
             android:src="@drawable/nusa_tv_logo" />
-
-        <Space
-            android:layout_width="0dp"
-            android:layout_height="1dp"
-            android:layout_weight="1" />
-
+        <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
         <Button
             android:id="@+id/btnFilterIndo"
             android:layout_width="wrap_content"
-            android:layout_height="48dp"
-            android:backgroundTint="#0797C2"
-            android:minWidth="0dp"
-            android:paddingStart="18dp"
-            android:paddingEnd="18dp"
-            android:text="Indonesia ▾"
+            android:layout_height="44dp"
+            android:backgroundTint="#1762D7"
+            android:minWidth="112dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:text="Indonesia ▼"
             android:textAllCaps="false"
             android:textColor="#FFFFFF"
             android:textSize="14sp"
             android:textStyle="bold" />
-
+        <Button
+            android:id="@+id/btnReload"
+            android:layout_width="46dp"
+            android:layout_height="46dp"
+            android:layout_marginStart="8dp"
+            android:backgroundTint="#1762D7"
+            android:minWidth="0dp"
+            android:padding="0dp"
+            android:text="＋"
+            android:textColor="#FFFFFF"
+            android:textSize="24sp"
+            android:contentDescription="Muat ulang playlist" />
+        <Button
+            android:id="@+id/btnStop"
+            android:layout_width="46dp"
+            android:layout_height="46dp"
+            android:layout_marginStart="7dp"
+            android:backgroundTint="#E50920"
+            android:minWidth="0dp"
+            android:padding="0dp"
+            android:text="⏻"
+            android:textColor="#FFFFFF"
+            android:textSize="22sp"
+            android:contentDescription="Hentikan pemutaran" />
         <Button
             android:id="@+id/btnFullscreen"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="8dp"
-            android:backgroundTint="#0797C2"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_marginStart="6dp"
+            android:backgroundTint="#263047"
             android:minWidth="0dp"
             android:padding="0dp"
             android:text="⛶"
-            android:textAllCaps="false"
             android:textColor="#FFFFFF"
-            android:textSize="25sp"
-            android:contentDescription="Fullscreen" />
-
-        <Button
-            android:id="@+id/btnReload"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:visibility="gone"
-            android:text="Refresh" />
+            android:textSize="20sp" />
     </LinearLayout>
 
+    <!-- Search and category shortcuts -->
     <EditText
         android:id="@+id/etSearch"
         android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:visibility="gone"
-        android:hint="Cari channel TV..."
-        android:inputType="text" />
+        android:layout_height="46dp"
+        android:layout_marginStart="14dp"
+        android:layout_marginEnd="14dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginBottom="2dp"
+        android:paddingStart="15dp"
+        android:paddingEnd="15dp"
+        android:background="@drawable/bg_search_nusa"
+        android:textColor="#FFFFFF"
+        android:textColorHint="#9CA2B5"
+        android:hint="⌕  Cari channel TV..."
+        android:inputType="text"
+        android:singleLine="true" />
 
     <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#07101C"
+        android:background="#141622"
         android:fillViewport="false"
         android:paddingStart="14dp"
-        android:paddingTop="10dp"
+        android:paddingTop="8dp"
         android:paddingEnd="14dp"
-        android:paddingBottom="10dp"
+        android:paddingBottom="9dp"
         android:scrollbars="none">
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-            <TextView
-                android:id="@+id/btnTabAll"
-                android:layout_width="wrap_content"
-                android:layout_height="48dp"
-                android:layout_marginEnd="8dp"
-                android:background="#0797C2"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:paddingStart="22dp"
-                android:paddingEnd="22dp"
-                android:text="Semua"
-                android:textColor="#FFFFFF"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-            <TextView
-                android:id="@+id/btnTabNews"
-                android:layout_width="wrap_content"
-                android:layout_height="48dp"
-                android:layout_marginEnd="8dp"
-                android:background="#202A36"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:paddingStart="22dp"
-                android:paddingEnd="22dp"
-                android:text="Berita TV"
-                android:textColor="#D4D9E2"
-                android:textSize="14sp" />
-            <TextView
-                android:id="@+id/btnTabKids"
-                android:layout_width="wrap_content"
-                android:layout_height="48dp"
-                android:background="#202A36"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:paddingStart="22dp"
-                android:paddingEnd="22dp"
-                android:text="TV Anak"
-                android:textColor="#D4D9E2"
-                android:textSize="14sp" />
+        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal">
+            <TextView android:id="@+id/btnTabAll" android:layout_width="wrap_content" android:layout_height="42dp" android:layout_marginEnd="8dp" android:background="@drawable/bg_tab_selected" android:clickable="true" android:focusable="true" android:gravity="center" android:paddingStart="22dp" android:paddingEnd="22dp" android:text="Semua" android:textColor="#FFFFFF" android:textSize="14sp" android:textStyle="bold" />
+            <TextView android:id="@+id/btnTabNews" android:layout_width="wrap_content" android:layout_height="42dp" android:layout_marginEnd="8dp" android:background="@drawable/bg_tab_idle" android:clickable="true" android:focusable="true" android:gravity="center" android:paddingStart="22dp" android:paddingEnd="22dp" android:text="Berita TV" android:textColor="#E6E8F0" android:textSize="14sp" />
+            <TextView android:id="@+id/btnTabKids" android:layout_width="wrap_content" android:layout_height="42dp" android:background="@drawable/bg_tab_idle" android:clickable="true" android:focusable="true" android:gravity="center" android:paddingStart="22dp" android:paddingEnd="22dp" android:text="TV Anak" android:textColor="#E6E8F0" android:textSize="14sp" />
         </LinearLayout>
     </HorizontalScrollView>
 
     <LinearLayout
         android:id="@+id/welcomePanel"
-        android:visibility="gone"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#102337"
+        android:background="#141622"
         android:orientation="vertical"
-        android:paddingStart="14dp"
-        android:paddingEnd="14dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
         android:paddingTop="7dp"
-        android:paddingBottom="7dp">
-        <TextView
-            android:id="@+id/tvLiveLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="● LIVE • NUSA TV"
-            android:textColor="#43D6A2"
-            android:textSize="11sp"
-            android:textStyle="bold" />
-        <TextView
-            android:id="@+id/tvWelcomeTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:maxLines="1"
-            android:text="Pilih channel"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-        <TextView
-            android:id="@+id/tvWelcomeDesc"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:maxLines="1"
-            android:text="Sumber: NUSA TV"
-            android:textColor="#AAB7C7"
-            android:textSize="11sp" />
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:visibility="gone">
-            <Button
-                android:id="@+id/btnStop"
-                android:layout_width="0dp"
-                android:layout_height="40dp"
-                android:layout_weight="1"
-                android:text="Berhenti" />
-            <Button
-                android:id="@+id/btnRetry"
-                android:layout_width="0dp"
-                android:layout_height="40dp"
-                android:layout_weight="1"
-                android:text="Coba lagi" />
+        android:paddingBottom="8dp">
+        <TextView android:id="@+id/tvLiveLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="● LIVE  •  NUSA TV" android:textColor="#18D7E8" android:textSize="11sp" android:textStyle="bold" />
+        <TextView android:id="@+id/tvWelcomeTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:maxLines="1" android:text="Pilih channel" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+        <TextView android:id="@+id/tvWelcomeDesc" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:text="Sumber: NUSA TV" android:textColor="#A4A8B8" android:textSize="11sp" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:visibility="gone">
+            <Button android:id="@+id/btnRetry" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:text="Coba lagi" />
         </LinearLayout>
-        <TextView
-            android:id="@+id/tvStatus"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:maxLines="1"
-            android:text="Memuat daftar channel..."
-            android:textColor="#AAB7C7"
-            android:textSize="10sp" />
+        <TextView android:id="@+id/tvStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:text="Memuat daftar channel..." android:textColor="#9CA2B5" android:textSize="10sp" />
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/statsBar"
-        android:visibility="gone"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="42dp"
+        android:background="#141622"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="10dp"
-        android:paddingBottom="6dp">
-        <TextView
-            android:id="@+id/tvSectionTitle"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="TV Nasional &amp; Indonesia"
-            android:textColor="#FFFFFF"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-        <TextView
-            android:id="@+id/tvStats"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="0 channel"
-            android:textColor="#0797C2"
-            android:textSize="12sp"
-            android:textStyle="bold" />
+        android:paddingStart="18dp"
+        android:paddingEnd="18dp">
+        <TextView android:id="@+id/tvSectionTitle" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Daftar Channel" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+        <TextView android:id="@+id/tvStats" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0 channel" android:textColor="#19D7E8" android:textSize="12sp" android:textStyle="bold" />
     </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
@@ -250,8 +164,10 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:background="#090A11"
         android:clipToPadding="false"
-        android:paddingStart="3dp"
-        android:paddingEnd="3dp"
-        android:paddingBottom="8dp" />
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="10dp" />
 </LinearLayout>

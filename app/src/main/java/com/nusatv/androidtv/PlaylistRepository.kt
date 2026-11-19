@@ -1,5 +1,6 @@
 package com.nusatv.androidtv
 
+import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -15,6 +16,8 @@ object PlaylistRepository {
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .followRedirects(true)
+        .followSslRedirects(true)
+        .retryOnConnectionFailure(true)
         .build()
 
     private val NATIONAL_PRIORITY = listOf(
@@ -24,38 +27,91 @@ object PlaylistRepository {
         "net", "mdtv", "cnn indonesia", "cnbc indonesia", "btv", "sin po tv", "garuda tv", "nusantara tv"
     )
 
-    suspend fun loadAllChannels(): List<TvChannel> = withContext(Dispatchers.IO) {
-        val request = Request.Builder()
-            .url(DefaultSources.REMOTE_PLAYLIST)
-            .header("User-Agent", "Mozilla/5.0 (Android; NusaTV/1.0)")
-            .build()
-
-        val body = client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw IllegalStateException("Playlist GitHub gagal dimuat: HTTP ${response.code}")
-            }
-            response.body?.string()?.takeIf { it.isNotBlank() }
-                ?: throw IllegalStateException("Playlist GitHub kosong")
-        }
-
-        val source = PlaylistSource(
+    /** Load the live remote playlist first; use the bundled M3U only when offline/server-down. */
+    suspend fun loadAllChannels(context: Context): List<TvChannel> = withContext(Dispatchers.IO) {
+        val remoteSource = PlaylistSource(
             url = DefaultSources.REMOTE_PLAYLIST,
-            name = "NUSA TV",
+            name = "NUSA TV • Server",
             fallbackCountry = "",
             fallbackGroup = ""
         )
-
-        parseM3U(body, source)
-            .groupBy { it.key }
-            .map { (_, channels) ->
-                val first = channels.first()
-                first.copy(sources = channels.flatMap { it.sources }.distinctBy { it.url }.toMutableList())
+        val preferences = context.applicationContext.getSharedPreferences("nusa_playlist_cache", Context.MODE_PRIVATE)
+        val (body, playlistSourceName) = try {
+            val request = Request.Builder()
+                .url(DefaultSources.REMOTE_PLAYLIST)
+                .header("User-Agent", "Mozilla/5.0 (Android; NusaTV/2.1)")
+                .header("Accept", "application/x-mpegURL, audio/x-mpegurl, text/plain, */*")
+                .build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
+                val remoteBody = response.body?.string()?.takeIf { it.isNotBlank() }
+                    ?: throw IllegalStateException("Playlist server kosong")
+                remoteBody to "NUSA TV • Server"
             }
-            .sortedWith(compareBy<TvChannel>(
-                { !it.isNational },
-                { val idx = NATIONAL_PRIORITY.indexOf(canonicalName(it.name)); if (idx >= 0) idx else 999 },
-                { it.name.lowercase() }
-            ))
+        } catch (remoteError: Exception) {
+            val cachedText = preferences.getString("last_valid_m3u", null)?.takeIf { it.isNotBlank() }
+            val bundledText = runCatching {
+                context.assets.open("playlist.m3u").bufferedReader(Charsets.UTF_8).use { it.readText() }
+            }.getOrNull()?.takeIf { it.isNotBlank() }
+            when {
+                cachedText != null -> cachedText to "NUSA TV • Cache"
+                bundledText != null -> bundledText to "NUSA TV • Cadangan lokal"
+                else -> throw IllegalStateException("Playlist online gagal dan cache/cadangan tidak tersedia", remoteError)
+            }
+        }
+
+        fun normalizeAndSort(text: String, sourceName: String): List<TvChannel> =
+            parseM3U(text, remoteSource.copy(name = sourceName))
+                .groupBy { it.key }
+                .map { (_, channels) ->
+                    val first = channels.first()
+                    first.copy(sources = channels.flatMap { it.sources }.distinctBy { it.url }.toMutableList())
+                }
+                .sortedWith(compareBy<TvChannel>(
+                    { !it.isNational },
+                    { val idx = NATIONAL_PRIORITY.indexOf(canonicalName(it.name)); if (idx >= 0) idx else 999 },
+                    { it.name.lowercase() }
+                ))
+
+        var parsed = normalizeAndSort(body, playlistSourceName)
+        if (parsed.isEmpty() && playlistSourceName == "NUSA TV • Server") {
+            val cachedText = preferences.getString("last_valid_m3u", null)?.takeIf { it.isNotBlank() }
+            if (cachedText != null && cachedText != body) parsed = normalizeAndSort(cachedText, "NUSA TV • Cache")
+            if (parsed.isEmpty()) {
+                val bundledText = runCatching {
+                    context.assets.open("playlist.m3u").bufferedReader(Charsets.UTF_8).use { it.readText() }
+                }.getOrNull().orEmpty()
+                parsed = normalizeAndSort(bundledText, "NUSA TV • Cadangan lokal")
+            }
+        }
+        if (parsed.isEmpty()) throw IllegalStateException("Playlist tidak berisi channel valid")
+        if (playlistSourceName == "NUSA TV • Server" && body.length <= 2_000_000) {
+            preferences.edit().putString("last_valid_m3u", body).apply()
+        }
+        parsed
+    }
+
+    private data class DomainHeaderProfile(val referer: String, val origin: String)
+
+    /**
+     * Allowlisted first-party web origins for providers whose own host is used
+     * as the stream host. This is a header compatibility list, not an access
+     * bypass: it cannot grant access to subscription-only or DRM-protected media.
+     */
+    private val DOMAIN_HEADER_ALLOWLIST = mapOf(
+        "dens.tv" to DomainHeaderProfile("https://www.dens.tv/", "https://www.dens.tv"),
+        "maxstream.tv" to DomainHeaderProfile("https://maxstream.tv/", "https://maxstream.tv"),
+        "rctiplus.com" to DomainHeaderProfile("https://www.rctiplus.com/", "https://www.rctiplus.com"),
+        "visionplus.id" to DomainHeaderProfile("https://www.visionplus.id/", "https://www.visionplus.id"),
+        "xlz.livebytexscore.com" to DomainHeaderProfile("https://xlz.livebytexscore.com/", "https://xlz.livebytexscore.com")
+    )
+
+    private fun headerProfileFor(streamUrl: String): DomainHeaderProfile? {
+        val host = runCatching { java.net.URI(streamUrl).host?.lowercase()?.trimEnd('.') }.getOrNull()
+            ?: return null
+        return DOMAIN_HEADER_ALLOWLIST.entries.firstOrNull { (domain, _) ->
+            host == domain || host.endsWith(".$domain")
+        }?.value
     }
 
     private fun fetchAndParse(source: PlaylistSource): List<TvChannel> {
@@ -201,9 +257,13 @@ object PlaylistRepository {
                                 currentGroup.contains("nasional", true) ||
                                 NATIONAL_PRIORITY.contains(key)
 
-                        val inferredReferer = currentReferer ?: if (line.contains("dens.tv", true)) "https://www.dens.tv/" else null
-                        val inferredOrigin = currentOrigin ?: if (line.contains("dens.tv", true)) "https://www.dens.tv" else null
-                        val needsHeader = inferredReferer != null || currentUserAgent != null
+                        // Provider header profiles are applied only when the stream URL host
+                        // itself belongs to a listed provider. CDN hosts must declare their
+                        // provider headers explicitly in the M3U metadata; do not guess them.
+                        val domainProfile = headerProfileFor(line)
+                        val inferredReferer = currentReferer ?: domainProfile?.referer
+                        val inferredOrigin = currentOrigin ?: domainProfile?.origin
+                        val needsHeader = inferredReferer != null || inferredOrigin != null || currentUserAgent != null
 
                         val candidate = StreamCandidate(
                             url = line,

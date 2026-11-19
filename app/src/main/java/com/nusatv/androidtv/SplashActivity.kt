@@ -28,12 +28,16 @@ class SplashActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             binding.tvSplashStatus.text = "Mengambil playlist TV Nasional Indonesia..."
-            val loaded = PlaylistRepository.loadAllChannels()
+            val loaded = runCatching { PlaylistRepository.loadAllChannels(this@SplashActivity) }
+                .getOrElse { emptyList() }
             ChannelCache.channels = loaded
 
-            binding.tvSplashStatus.text = "${loaded.size} channel siap diputar!"
-            delay(500)
-
+            binding.tvSplashStatus.text = if (loaded.isNotEmpty()) {
+                "${loaded.size} channel siap diputar!"
+            } else {
+                "Playlist belum tersedia. Periksa koneksi internet."
+            }
+            delay(350)
             startActivity(Intent(this@SplashActivity, MainActivity::class.java))
             finish()
         }

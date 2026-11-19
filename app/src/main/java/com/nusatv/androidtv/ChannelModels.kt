@@ -31,7 +31,7 @@ data class TvChannel(
 )
 
 object DefaultSources {
-    // Playlist remote: edit playlist.m3u in GitHub to update channels without rebuilding APK.
+    // Remote playlist served by the NUSA TV Cloudflare Worker.
     const val REMOTE_PLAYLIST =
         "https://spring-grass-97c6.nusatv.workers.dev/api/playlist.m3u"
 }
