@@ -28,11 +28,15 @@ data class TvChannel(
     val categories: List<String>,
     val sources: MutableList<StreamCandidate>,
     val isNational: Boolean,
-    val programTitle: String? = null
+    val programTitle: String? = null,
+    val tvgId: String? = null,
+    val currentProgramTitle: String? = null,
+    val nextProgramTitle: String? = null
 )
 
 object DefaultSources {
     // Remote playlist served by the NUSA TV Cloudflare Worker.
+    const val XMLTV_URL = "https://raw.githubusercontent.com/dhasap/dhanytv/refs/heads/main/epg.xml"
     const val REMOTE_PLAYLIST =
         "https://spring-grass-97c6.nusatv.workers.dev/api/playlist.m3u"
 }

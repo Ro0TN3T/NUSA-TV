@@ -49,8 +49,14 @@ class ChannelAdapter(
         fun bind(channel: TvChannel, isSelected: Boolean) {
             itemView.isSelected = isSelected
             tvName.text = channel.name
-            tvMeta.text = channel.programTitle?.takeIf { it.isNotBlank() }
-                ?: "${channel.country} • ${channel.sources.size} server"
+            val now = channel.currentProgramTitle?.takeIf { it.isNotBlank() }
+            val next = channel.nextProgramTitle?.takeIf { it.isNotBlank() }
+            tvMeta.text = when {
+                now != null && next != null -> "● $now  •  Berikutnya: $next"
+                now != null -> "● $now"
+                channel.programTitle?.isNotBlank() == true -> channel.programTitle
+                else -> "${channel.country} • ${channel.sources.size} server"
+            }
 
             badgeMulti.visibility = if (channel.sources.size > 1) View.VISIBLE else View.GONE
             badgeNative.visibility = if (channel.sources.any { it.requiresCustomHeader }) View.VISIBLE else View.GONE

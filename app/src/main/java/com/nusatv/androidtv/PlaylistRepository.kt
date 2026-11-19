@@ -137,6 +137,7 @@ object PlaylistRepository {
         var currentName = ""
         var currentProgramTitle: String? = null
         var currentLogo = ""
+        var currentTvgId: String? = null
         var currentCountry = source.fallbackCountry
         var currentGroup = source.fallbackGroup
         var currentReferer: String? = null
@@ -164,6 +165,7 @@ object PlaylistRepository {
                     currentCountry = source.fallbackCountry
                     currentGroup = source.fallbackGroup
                     currentLogo = extractAttr(attrs, "tvg-logo")
+                    currentTvgId = extractAttr(attrs, "tvg-id")
                     val c = extractAttr(attrs, "tvg-country")
                     if (c.isNotEmpty()) currentCountry = if (c.equals("ID", true)) "Indonesia" else c
                     val g = extractAttr(attrs, "group-title")
@@ -290,7 +292,8 @@ object PlaylistRepository {
                                 categories = if (isIndo) listOf("Indonesia", currentGroup.ifEmpty { "Umum" }) else listOf(currentGroup.ifEmpty { "Umum" }),
                                 sources = mutableListOf(candidate),
                                 isNational = NATIONAL_PRIORITY.contains(key),
-                                programTitle = currentProgramTitle
+                                programTitle = currentProgramTitle,
+                                tvgId = currentTvgId
                             )
                         )
                     }

@@ -59,7 +59,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="3dp"
             android:ellipsize="end"
-            android:maxLines="1"
+            android:maxLines="2"
             android:text="Program sedang tayang"
             android:textColor="#AAB7C7"
             android:textSize="12sp" />

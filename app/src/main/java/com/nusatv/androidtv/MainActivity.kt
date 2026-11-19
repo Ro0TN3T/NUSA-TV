@@ -64,6 +64,12 @@ class MainActivity : AppCompatActivity() {
             tryNextSource("Buffering timeout setelah 15 detik")
         }
     }
+    private val epgRefreshRunnable = object : Runnable {
+        override fun run() {
+            refreshEpg()
+            mainHandler.postDelayed(this, 5 * 60 * 1000L)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -77,6 +83,8 @@ class MainActivity : AppCompatActivity() {
         setupControls()
 
         allChannels = ChannelCache.channels
+        refreshEpg()
+        mainHandler.postDelayed(epgRefreshRunnable, 5 * 60 * 1000L)
         if (allChannels.isEmpty()) {
             reloadPlaylists()
         } else {
@@ -142,6 +150,7 @@ class MainActivity : AppCompatActivity() {
                 allChannels = PlaylistRepository.loadAllChannels(this@MainActivity)
                 ChannelCache.channels = allChannels
                 applyFilter()
+                refreshEpg()
                 binding.tvStatus.text = "${allChannels.size} channel dimuat dari server NUSA TV."
                 if (currentChannel == null && allChannels.isNotEmpty()) {
                     val first = allChannels.firstOrNull { it.country == "Indonesia" } ?: allChannels.first()
@@ -152,6 +161,31 @@ class MainActivity : AppCompatActivity() {
                 if (allChannels.isEmpty()) adapter.submitList(emptyList())
             } finally {
                 binding.btnReload.isEnabled = true
+            }
+        }
+    }
+
+    private fun refreshEpg() {
+        lifecycleScope.launch {
+            try {
+                val schedules = EpgRepository.loadSchedules()
+                val updated = allChannels.map { channel ->
+                    val schedule = channel.tvgId?.let { schedules[it] }
+                        ?: schedules[channel.key]
+                        ?: schedules.entries.firstOrNull {
+                            PlaylistRepository.canonicalName(it.key) == channel.key
+                        }?.value
+                    channel.copy(
+                        currentProgramTitle = schedule?.current,
+                        nextProgramTitle = schedule?.next
+                    )
+                }
+                allChannels = updated
+                if (allChannels.isNotEmpty()) applyFilter()
+                binding.tvStatus.text = "EPG berhasil diperbarui • XMLTV"
+            } catch (_: Exception) {
+                // EPG is optional: live playback and channel list remain available.
+                binding.tvStatus.text = "Jadwal EPG belum tersedia • Siaran tetap berjalan"
             }
         }
     }
@@ -388,8 +422,17 @@ class MainActivity : AppCompatActivity() {
         updateServerTabs()
         binding.tvLiveLabel.text = "● LIVE • SEDANG MEMUAT"
         binding.tvWelcomeTitle.text = channel.name
-        binding.tvWelcomeDesc.text = channel.programTitle?.takeIf { it.isNotBlank() }
-            ?: "Sumber: ${candidate.sourceName} • Info acara belum tersedia di playlist"
+        binding.tvWelcomeDesc.text = buildString {
+            val now = channel.currentProgramTitle
+            val next = channel.nextProgramTitle
+            if (!now.isNullOrBlank()) append("Sekarang: $now")
+            if (!next.isNullOrBlank()) {
+                if (isNotEmpty()) append("  •  ")
+                append("Berikutnya: $next")
+            }
+            if (isEmpty()) append(channel.programTitle?.takeIf { it.isNotBlank() }
+                ?: "Sumber: ${candidate.sourceName} • Menunggu info EPG")
+        }
         binding.tvStatus.text = "Menghubungkan ke ${channel.name} (${sourceIdx + 1}/${channel.sources.size})..."
 
         releasePlayer()
@@ -725,6 +768,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        mainHandler.removeCallbacks(epgRefreshRunnable)
         releasePlayer()
         super.onDestroy()
     }
