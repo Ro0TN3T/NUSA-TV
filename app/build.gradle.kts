@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.nusatv.androidtv"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.nusatv.androidtv"
