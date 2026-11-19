@@ -82,15 +82,15 @@ class MainActivity : AppCompatActivity() {
             toggleFullscreen(!isFullscreen)
         }
 
-        binding.btnTabAll.setOnClickListener {
+        binding.btnTabAll?.setOnClickListener {
             selectedCategory = "Semua"
             applyFilter()
         }
-        binding.btnTabNews.setOnClickListener {
+        binding.btnTabNews?.setOnClickListener {
             selectedCategory = "News"
             applyFilter()
         }
-        binding.btnTabKids.setOnClickListener {
+        binding.btnTabKids?.setOnClickListener {
             selectedCategory = "Kids"
             applyFilter()
         }
@@ -168,9 +168,9 @@ class MainActivity : AppCompatActivity() {
 
         val activeTab = android.graphics.Color.parseColor("#0797C2")
         val idleTab = android.graphics.Color.parseColor("#202A36")
-        binding.btnTabAll.setBackgroundColor(if (selectedCategory == "Semua" || selectedCategory == "Indonesia") activeTab else idleTab)
-        binding.btnTabNews.setBackgroundColor(if (selectedCategory == "News") activeTab else idleTab)
-        binding.btnTabKids.setBackgroundColor(if (selectedCategory == "Kids") activeTab else idleTab)
+        binding.btnTabAll?.setBackgroundColor(if (selectedCategory == "Semua" || selectedCategory == "Indonesia") activeTab else idleTab)
+        binding.btnTabNews?.setBackgroundColor(if (selectedCategory == "News") activeTab else idleTab)
+        binding.btnTabKids?.setBackgroundColor(if (selectedCategory == "Kids") activeTab else idleTab)
         if (isAndroidTv && !isFullscreen && filtered.isNotEmpty()) {
             binding.rvChannels.post {
                 if (!binding.rvChannels.hasFocus()) {
@@ -444,13 +444,15 @@ class MainActivity : AppCompatActivity() {
             binding.statsBar.visibility = View.GONE
             binding.rvChannels.visibility = View.GONE
 
-            val params = binding.heroSection.layoutParams
-            params.height = android.view.ViewGroup.LayoutParams.MATCH_PARENT
-            binding.heroSection.layoutParams = params
+            binding.heroSection?.let { hero ->
+                val params = hero.layoutParams
+                params.height = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                hero.layoutParams = params
+                hero.setPadding(0, 0, 0, 0)
+            }
             val playerParams = binding.playerContainer.layoutParams
             playerParams.height = android.view.ViewGroup.LayoutParams.MATCH_PARENT
             binding.playerContainer.layoutParams = playerParams
-            binding.heroSection.setPadding(0, 0, 0, 0)
             binding.playerContainer.requestFocus()
         } else {
             binding.headerBar.visibility = View.VISIBLE
@@ -459,17 +461,19 @@ class MainActivity : AppCompatActivity() {
             binding.rvChannels.visibility = View.VISIBLE
 
             val density = resources.displayMetrics.density
-            val params = binding.heroSection.layoutParams
-            params.height = if (isAndroidTv) (230 * density).toInt()
-                else android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-            binding.heroSection.layoutParams = params
+            binding.heroSection?.let { hero ->
+                val params = hero.layoutParams
+                params.height = if (isAndroidTv) (230 * density).toInt()
+                    else android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                hero.layoutParams = params
+                val padH = ((if (isAndroidTv) 24 else 12) * density).toInt()
+                val padT = ((if (isAndroidTv) 12 else 10) * density).toInt()
+                hero.setPadding(padH, padT, padH, 0)
+            }
             val playerParams = binding.playerContainer.layoutParams
             playerParams.height = if (isAndroidTv) android.view.ViewGroup.LayoutParams.MATCH_PARENT
                 else (190 * density).toInt()
             binding.playerContainer.layoutParams = playerParams
-            val padH = ((if (isAndroidTv) 24 else 12) * density).toInt()
-            val padT = ((if (isAndroidTv) 12 else 10) * density).toInt()
-            binding.heroSection.setPadding(padH, padT, padH, 0)
             binding.rvChannels.requestFocus()
         }
     }
