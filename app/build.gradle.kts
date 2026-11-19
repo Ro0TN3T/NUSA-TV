@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("androidx.baselineprofile")
 }
 
 android {
@@ -9,10 +10,13 @@ android {
 
     defaultConfig {
         applicationId = "com.nusatv.androidtv"
-        minSdk = 21
+        minSdk = 24
         targetSdk = 34
-        versionCode = 14
-        versionName = "2.4.2"
+        versionCode = 15
+        versionName = "2.5.0"
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
 
     buildTypes {
@@ -54,4 +58,11 @@ dependencies {
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("io.coil-kt:coil:2.7.0")
+
+    // Native FFmpeg runtime (LGPL build, no GPL encoders). Requires 64-bit Android 7+.
+    implementation("dev.ffmpegkit-maintained:ffmpeg-kit-min:8.1.7")
+
+    // Installs generated Baseline Profiles on supported Android versions.
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
+    baselineProfile(project(":baselineprofile"))
 }

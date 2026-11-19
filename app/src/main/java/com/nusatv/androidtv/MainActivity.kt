@@ -39,6 +39,9 @@ import com.nusatv.androidtv.databinding.ActivityMainBinding
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import java.io.IOException
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -54,6 +57,7 @@ class MainActivity : AppCompatActivity() {
     private var currentSourceIndex = 0
     private var selectedCategory = "Indonesia"
     private var filterGeneration = 0
+    private var filterJob: Job? = null
     private var categoryDialog: AlertDialog? = null
     private var isFullscreen = false
     private var isAndroidTv = false
@@ -210,10 +214,20 @@ class MainActivity : AppCompatActivity() {
         val requestId = ++filterGeneration
         val source = allChannels
         val category = selectedCategory
-        lifecycleScope.launch {
+        // Cancel the previous scan instead of queuing multiple expensive filters on slow phones.
+        filterJob?.cancel()
+        filterJob = lifecycleScope.launch {
             val filteredChannels = withContext(Dispatchers.Default) {
                 if (category == "Semua") source
-                else source.filter { channelMatchesCategory(it, category) }
+                else {
+                    val workerContext = currentCoroutineContext()
+                    buildList {
+                        source.forEachIndexed { index, channel ->
+                            if ((index and 127) == 0) workerContext.ensureActive()
+                            if (channelMatchesCategory(channel, category)) add(channel)
+                        }
+                    }
+                }
             }
             if (requestId != filterGeneration || isFinishing || isDestroyed) return@launch
             adapter.submitList(filteredChannels, currentChannel?.key)
@@ -705,6 +719,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         mainHandler.removeCallbacks(epgRefreshRunnable)
+        categoryDialog?.dismiss()
+        filterJob?.cancel()
         releasePlayer()
         super.onDestroy()
     }

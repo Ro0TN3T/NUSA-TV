@@ -30,4 +30,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "NusaTV"
-include(":app")
+include(":app", ":baselineprofile")
