@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg_dark">#090A0D</color>
-    <color name="panel">#14161B</color>
-    <color name="panel_light">#20232A</color>
-    <color name="line">#30343D</color>
-    <color name="muted">#A5A9B2</color>
-    <color name="txt_white">#FFFFFF</color>
-    <color name="blue_primary">#E52B3A</color>
-    <color name="cyan_accent">#FF4655</color>
-    <color name="gold_badge">#49351A</color>
+    <color name="bg_dark">#07101C</color>
+    <color name="panel">#102337</color>
+    <color name="panel_light">#172B40</color>
+    <color name="line">#263B52</color>
+    <color name="muted">#AAB7C7</color>
+    <color name="txt_white">#F4F7FF</color>
+    <color name="blue_primary">#0797C2</color>
+    <color name="cyan_accent">#0797C2</color>
+    <color name="gold_badge">#62471B</color>
     <color name="gold_text">#FFE0A0</color>
-    <color name="multi_badge">#3B2025</color>
-    <color name="multi_text">#FF9AA3</color>
+    <color name="multi_badge">#174D53</color>
+    <color name="multi_text">#A7F2EC</color>
 </resources>

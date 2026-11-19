@@ -82,6 +82,19 @@ class MainActivity : AppCompatActivity() {
             toggleFullscreen(!isFullscreen)
         }
 
+        binding.btnTabAll.setOnClickListener {
+            selectedCategory = "Semua"
+            applyFilter()
+        }
+        binding.btnTabNews.setOnClickListener {
+            selectedCategory = "News"
+            applyFilter()
+        }
+        binding.btnTabKids.setOnClickListener {
+            selectedCategory = "Kids"
+            applyFilter()
+        }
+
         binding.playerContainer.setOnClickListener {
             toggleFullscreen(!isFullscreen)
         }
@@ -152,6 +165,12 @@ class MainActivity : AppCompatActivity() {
             "Kids" -> "TV Anak ▾"
             else -> "$selectedCategory ▾"
         }
+
+        val activeTab = android.graphics.Color.parseColor("#0797C2")
+        val idleTab = android.graphics.Color.parseColor("#202A36")
+        binding.btnTabAll.setBackgroundColor(if (selectedCategory == "Semua" || selectedCategory == "Indonesia") activeTab else idleTab)
+        binding.btnTabNews.setBackgroundColor(if (selectedCategory == "News") activeTab else idleTab)
+        binding.btnTabKids.setBackgroundColor(if (selectedCategory == "Kids") activeTab else idleTab)
         if (isAndroidTv && !isFullscreen && filtered.isNotEmpty()) {
             binding.rvChannels.post {
                 if (!binding.rvChannels.hasFocus()) {
