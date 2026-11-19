@@ -81,6 +81,7 @@ object PlaylistRepository {
         var currentCountry = source.fallbackCountry
         var currentGroup = source.fallbackGroup
         var currentReferer: String? = null
+        var currentOrigin: String? = null
         var currentUserAgent: String? = null
         var hasDrm = false
 
@@ -104,6 +105,7 @@ object PlaylistRepository {
                     if (g.isNotEmpty()) currentGroup = g
 
                     currentReferer = null
+                    currentOrigin = null
                     currentUserAgent = null
                     hasDrm = false
                 }
@@ -113,6 +115,10 @@ object PlaylistRepository {
                         currentReferer = opt.substringAfter("=").trim()
                     } else if (opt.startsWith("http-user-agent=", true)) {
                         currentUserAgent = opt.substringAfter("=").trim()
+                    } else if (opt.startsWith("http-origin=", true)) {
+                        // Origin diturunkan dari referer jika provider mengatur keduanya
+                        // lewat konfigurasi playlist; saat ini StreamCandidate menyimpan origin.
+                        currentOrigin = opt.substringAfter("=").trim()
                     }
                 }
                 line.startsWith("#KODIPROP:", ignoreCase = true) -> {
@@ -129,7 +135,7 @@ object PlaylistRepository {
                                 NATIONAL_PRIORITY.contains(key)
 
                         val inferredReferer = currentReferer ?: if (line.contains("dens.tv", true)) "https://www.dens.tv/" else null
-                        val inferredOrigin = if (line.contains("dens.tv", true)) "https://www.dens.tv" else null
+                        val inferredOrigin = currentOrigin ?: if (line.contains("dens.tv", true)) "https://www.dens.tv" else null
                         val needsHeader = inferredReferer != null || currentUserAgent != null
 
                         val candidate = StreamCandidate(
@@ -167,9 +173,16 @@ object PlaylistRepository {
     }
 
     private fun isValidStreamUrl(url: String): Boolean {
-        val lower = url.lowercase()
-        if (lower.endsWith(".mpd") || lower.endsWith(".mp4") || lower.endsWith(".mkv")) return false
-        return lower.contains(".m3u8") || !lower.substringAfterLast('/').contains('.')
+        // Jangan menolak URL hanya karena ekstensi tidak terlihat atau ada query string.
+        // Beberapa endpoint resmi melakukan redirect atau menyajikan manifest dari URL dinamis.
+        // Apakah respons benar-benar media akan diputuskan oleh Media3 saat playback.
+        return try {
+            val uri = java.net.URI(url)
+            (uri.scheme.equals("http", true) || uri.scheme.equals("https", true)) &&
+                !uri.host.isNullOrBlank()
+        } catch (_: Exception) {
+            false
+        }
     }
 
     fun cleanName(raw: String): String {

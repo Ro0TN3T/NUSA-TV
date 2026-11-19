@@ -24,7 +24,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.recyclerview.widget.GridLayoutManager
 import com.nusatv.androidtv.databinding.ActivityMainBinding
 import kotlinx.coroutines.launch
@@ -371,12 +371,18 @@ class MainActivity : AppCompatActivity() {
         val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
             .setDefaultRequestProperties(headersMap)
 
-        val hlsMediaSource = HlsMediaSource.Factory(dataSourceFactory)
-            .setAllowChunklessPreparation(true)
-            .createMediaSource(MediaItem.fromUri(candidate.url))
+        // DefaultMediaSourceFactory memilih HLS, DASH, atau progressive
+        // berdasarkan URI/MIME type MediaItem. Header diterapkan ke manifest,
+        // segment, dan request media melalui OkHttpDataSource.
+        val mediaSourceFactory = DefaultMediaSourceFactory(this)
+            .setDataSourceFactory(dataSourceFactory)
 
-        val exoPlayer = ExoPlayer.Builder(this).build().apply {
-            setMediaSource(hlsMediaSource)
+        val mediaItem = MediaItem.fromUri(candidate.url)
+
+        val exoPlayer = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .build().apply {
+            setMediaItem(mediaItem)
             playWhenReady = true
             addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
