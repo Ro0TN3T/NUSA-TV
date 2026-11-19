@@ -99,24 +99,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnFilterIndo.visibility = View.GONE
         binding.btnFullscreen.visibility = View.GONE
         binding.etSearch.visibility = View.GONE
-        binding.btnTabAll?.visibility = View.GONE
-        binding.btnTabNews?.visibility = View.GONE
-        binding.btnTabKids?.visibility = View.GONE
-
         binding.btnFullscreen.setOnClickListener { requestLandscapeFullscreen() }
-
-        binding.btnTabAll?.setOnClickListener {
-            selectedCategory = "Semua"
-            applyFilter()
-        }
-        binding.btnTabNews?.setOnClickListener {
-            selectedCategory = "News"
-            applyFilter()
-        }
-        binding.btnTabKids?.setOnClickListener {
-            selectedCategory = "Kids"
-            applyFilter()
-        }
 
         binding.playerContainer.setOnClickListener {
             toggleFullscreen(!isFullscreen)
@@ -204,7 +187,7 @@ class MainActivity : AppCompatActivity() {
                 layoutParams = LinearLayout.LayoutParams(-2, dp(42)).apply {
                     marginEnd = dp(7)
                 }
-                contentDescription = "Putar ${source.name}"
+                contentDescription = "Putar ${source.sourceName}"
                 setOnClickListener {
                     currentSourceIndex = index
                     transientRetryCount = 0
