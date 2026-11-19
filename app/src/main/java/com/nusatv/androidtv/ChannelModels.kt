@@ -13,7 +13,11 @@ data class StreamCandidate(
     val userAgent: String = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     val referer: String? = null,
     val origin: String? = null,
-    val requiresCustomHeader: Boolean = false
+    val requiresCustomHeader: Boolean = false,
+    val drmType: String? = null,
+    val licenseUrl: String? = null,
+    val licenseHeaders: Map<String, String> = emptyMap(),
+    val mimeType: String? = null
 )
 
 data class TvChannel(

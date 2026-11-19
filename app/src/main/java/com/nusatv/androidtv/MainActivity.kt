@@ -18,9 +18,11 @@ import android.view.WindowManager
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -377,7 +379,23 @@ class MainActivity : AppCompatActivity() {
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(dataSourceFactory)
 
-        val mediaItem = MediaItem.fromUri(candidate.url)
+        val mediaItemBuilder = MediaItem.Builder().setUri(candidate.url)
+        when (candidate.mimeType) {
+            "application/x-mpegURL" -> mediaItemBuilder.setMimeType(MimeTypes.APPLICATION_M3U8)
+            "application/dash+xml" -> mediaItemBuilder.setMimeType(MimeTypes.APPLICATION_MPD)
+        }
+        val drmUuid = when (candidate.drmType) {
+            "widevine" -> C.WIDEVINE_UUID
+            "clearkey" -> C.CLEARKEY_UUID
+            else -> null
+        }
+        if (drmUuid != null && !candidate.licenseUrl.isNullOrBlank()) {
+            val drmBuilder = MediaItem.DrmConfiguration.Builder(drmUuid)
+                .setLicenseUri(candidate.licenseUrl!!)
+                .setLicenseRequestHeaders(candidate.licenseHeaders)
+            mediaItemBuilder.setDrmConfiguration(drmBuilder.build())
+        }
+        val mediaItem = mediaItemBuilder.build()
 
         val exoPlayer = ExoPlayer.Builder(this)
             .setMediaSourceFactory(mediaSourceFactory)

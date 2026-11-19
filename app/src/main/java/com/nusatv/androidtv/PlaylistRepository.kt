@@ -6,6 +6,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.text.Normalizer
 import java.util.concurrent.TimeUnit
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 
 object PlaylistRepository {
 
@@ -38,7 +40,7 @@ object PlaylistRepository {
 
         val source = PlaylistSource(
             url = DefaultSources.REMOTE_PLAYLIST,
-            name = "NUSA TV • GitHub",
+            name = "NUSA TV",
             fallbackCountry = "",
             fallbackGroup = ""
         )
@@ -83,7 +85,11 @@ object PlaylistRepository {
         var currentReferer: String? = null
         var currentOrigin: String? = null
         var currentUserAgent: String? = null
-        var hasDrm = false
+        var drmType: String? = null
+        var licenseUrl: String? = null
+        var licenseHeaders = mutableMapOf<String, String>()
+        var invalidDrmConfig = false
+        var currentMimeType: String? = null
 
         for (rawLine in lines) {
             val line = rawLine.trim()
@@ -107,7 +113,11 @@ object PlaylistRepository {
                     currentReferer = null
                     currentOrigin = null
                     currentUserAgent = null
-                    hasDrm = false
+                    drmType = null
+                    licenseUrl = null
+                    licenseHeaders = mutableMapOf()
+                    invalidDrmConfig = false
+                    currentMimeType = null
                 }
                 line.startsWith("#EXTVLCOPT:", ignoreCase = true) -> {
                     val opt = line.substringAfter(":")
@@ -116,18 +126,75 @@ object PlaylistRepository {
                     } else if (opt.startsWith("http-user-agent=", true)) {
                         currentUserAgent = opt.substringAfter("=").trim()
                     } else if (opt.startsWith("http-origin=", true)) {
-                        // Origin diturunkan dari referer jika provider mengatur keduanya
-                        // lewat konfigurasi playlist; saat ini StreamCandidate menyimpan origin.
                         currentOrigin = opt.substringAfter("=").trim()
+                    } else if (opt.startsWith("mimetype=", true)) {
+                        currentMimeType = normalizeMimeType(opt.substringAfter("=").trim())
                     }
                 }
                 line.startsWith("#KODIPROP:", ignoreCase = true) -> {
-                    if (line.contains("widevine", true) || line.contains("clearkey", true) || line.contains("license_key", true)) {
-                        hasDrm = true
+                    val property = line.substringAfter(":").trim()
+                    val key = property.substringBefore("=", "").trim().lowercase()
+                    val value = property.substringAfter("=", "").trim()
+                    when (key) {
+                        "inputstream.adaptive.stream_headers" -> {
+                            value.split('&').forEach { pair ->
+                                val eq = pair.indexOf('=')
+                                if (eq > 0) {
+                                    val headerName = URLDecoder.decode(pair.substring(0, eq), StandardCharsets.UTF_8.name()).trim()
+                                    val headerValue = URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8.name()).trim()
+                                    when (headerName.lowercase()) {
+                                        "user-agent" -> currentUserAgent = headerValue
+                                        "referer" -> currentReferer = headerValue
+                                        "origin" -> currentOrigin = headerValue
+                                    }
+                                }
+                            }
+                        }
+                        "inputstream.adaptive.manifest_type" -> {
+                            currentMimeType = when (value.lowercase()) {
+                                "hls", "m3u8" -> "application/x-mpegURL"
+                                "mpd", "dash" -> "application/dash+xml"
+                                else -> currentMimeType
+                            }
+                        }
+                        "mimetype" -> currentMimeType = normalizeMimeType(value)
+                        "inputstream.adaptive.license_type" -> {
+                            drmType = when (value.lowercase()) {
+                                "com.widevine.alpha", "widevine" -> "widevine"
+                                "org.w3.clearkey", "clearkey" -> "clearkey"
+                                else -> null
+                            }
+                            if (drmType == null) invalidDrmConfig = true
+                        }
+                        "inputstream.adaptive.license_key" -> {
+                            // Kodi-style form: https://license.example/path|Header=Value&Header2=Value|flags
+                            // Inline key material is intentionally not imported.
+                            val parts = value.split('|')
+                            val uriPart = parts.firstOrNull()?.trim().orEmpty()
+                            val parsedUri = runCatching { java.net.URI(uriPart) }.getOrNull()
+                            if (parsedUri != null && parsedUri.scheme.equals("https", true) && !parsedUri.host.isNullOrBlank()) {
+                                licenseUrl = uriPart
+                                if (parts.size > 1) {
+                                    parts[1].split('&').forEach { pair ->
+                                        val eq = pair.indexOf('=')
+                                        if (eq > 0) {
+                                            val headerName = URLDecoder.decode(pair.substring(0, eq), StandardCharsets.UTF_8.name()).trim()
+                                            val headerValue = URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8.name()).trim()
+                                            if (headerName.isNotBlank() && headerValue.isNotBlank() && !headerName.contains('\n') && !headerValue.contains('\n')) {
+                                                licenseHeaders[headerName] = headerValue
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                invalidDrmConfig = true
+                            }
+                        }
                     }
                 }
                 line.startsWith("http://", true) || line.startsWith("https://", true) -> {
-                    if (currentName.isNotEmpty() && !hasDrm && isValidStreamUrl(line)) {
+                    val drmReady = !invalidDrmConfig && ((drmType == null && licenseUrl == null) || (drmType != null && licenseUrl != null))
+                    if (currentName.isNotEmpty() && drmReady && isValidStreamUrl(line)) {
                         val key = canonicalName(currentName)
                         val isIndo = currentCountry.equals("Indonesia", true) ||
                                 currentGroup.contains("indonesia", true) ||
@@ -144,7 +211,11 @@ object PlaylistRepository {
                             userAgent = currentUserAgent ?: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                             referer = inferredReferer,
                             origin = inferredOrigin,
-                            requiresCustomHeader = needsHeader
+                            requiresCustomHeader = needsHeader,
+                            drmType = drmType,
+                            licenseUrl = licenseUrl,
+                            licenseHeaders = licenseHeaders.toMap(),
+                            mimeType = currentMimeType ?: inferMimeType(line)
                         )
 
                         out.add(
@@ -170,6 +241,25 @@ object PlaylistRepository {
         val pattern = "(?:^|\\s)$key=\"([^\"]*)\""
         val regex = Regex(pattern, RegexOption.IGNORE_CASE)
         return regex.find(attrs)?.groupValues?.getOrNull(1)?.trim() ?: ""
+    }
+
+    private fun inferMimeType(url: String): String? {
+        val uri = runCatching { java.net.URI(url) }.getOrNull() ?: return null
+        val path = uri.path.orEmpty().lowercase()
+        return when {
+            path.endsWith(".m3u8") -> "application/x-mpegURL"
+            path.endsWith(".mpd") -> "application/dash+xml"
+            // Samsung TV Plus entries in the supplied playlist use extensionless stvp-* URLs.
+            // Treat as HLS manifests; actual availability and provider authorization still apply.
+            uri.host.equals("jmp2.uk", true) && path.startsWith("/stvp-") -> "application/x-mpegURL"
+            else -> null
+        }
+    }
+
+    private fun normalizeMimeType(value: String): String? = when (value.lowercase()) {
+        "application/x-mpegurl", "application/vnd.apple.mpegurl", "application/mpegurl" -> "application/x-mpegURL"
+        "application/dash+xml", "application/mpd" -> "application/dash+xml"
+        else -> null
     }
 
     private fun isValidStreamUrl(url: String): Boolean {
