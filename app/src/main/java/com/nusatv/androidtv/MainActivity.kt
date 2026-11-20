@@ -908,12 +908,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestLandscapeFullscreen() {
-        if (isAndroidTv) {
-            setFullscreenUi(true)
-            return
+        if (!isAndroidTv) {
+            // Fullscreen video is always landscape, even when the phone was
+            // previously held in portrait. SENSOR_LANDSCAPE also permits both
+            // landscape directions while preventing a return to portrait.
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         }
-        // Lock the current orientation: fullscreen works in portrait and landscape.
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LOCKED
         setFullscreenUi(true)
     }
 
@@ -969,8 +969,25 @@ class MainActivity : AppCompatActivity() {
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
         if (isAndroidTv) return
-        // Do not exit fullscreen when Android reports a configuration change.
-        if (isFullscreen) setFullscreenUi(true)
+
+        val isLandscape = newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val hasActiveVideo = player != null &&
+            (player?.isPlaying == true || player?.playWhenReady == true)
+
+        // When the user rotates a playing phone to landscape, enter fullscreen
+        // automatically. Do not force fullscreen merely because the app starts
+        // in landscape with no channel playing.
+        if (isLandscape && hasActiveVideo && !isFullscreen) {
+            requestLandscapeFullscreen()
+            return
+        }
+
+        // Configuration changes during fullscreen must preserve the fullscreen
+        // player UI. The requested orientation remains landscape-only.
+        if (isFullscreen) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            setFullscreenUi(true)
+        }
     }
 
     private fun changeChannel(step: Int): Boolean {
