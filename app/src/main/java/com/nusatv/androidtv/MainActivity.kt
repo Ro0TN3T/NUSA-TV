@@ -925,7 +925,7 @@ class MainActivity : AppCompatActivity() {
             binding.welcomePanel.visibility = View.GONE
             binding.statsBar.visibility = View.GONE
             binding.rvChannels.visibility = View.GONE
-            binding.serverTabsScroll.visibility = View.GONE
+            binding.serverTabsScroll?.visibility = View.GONE
             binding.etSearch.visibility = View.GONE
             binding.playerContainer.layoutParams = binding.playerContainer.layoutParams.apply {
                 width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
@@ -946,7 +946,7 @@ class MainActivity : AppCompatActivity() {
             binding.welcomePanel.visibility = View.GONE
             binding.statsBar.visibility = View.GONE
             binding.rvChannels.visibility = View.VISIBLE
-            binding.serverTabsScroll.visibility = View.VISIBLE
+            binding.serverTabsScroll?.visibility = View.VISIBLE
             binding.etSearch.visibility = View.GONE
             val density = resources.displayMetrics.density
             binding.playerContainer.layoutParams = binding.playerContainer.layoutParams.apply {
