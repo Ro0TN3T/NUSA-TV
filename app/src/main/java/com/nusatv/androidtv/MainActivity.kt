@@ -86,6 +86,7 @@ class MainActivity : AppCompatActivity() {
     private var touchStartX = 0f
     private var touchStartY = 0f
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val playerOverlayHideRunnable = Runnable { fullscreenOverlay?.visibility = View.GONE }
     private val bufferingTimeout = Runnable {
         if (player?.playbackState == Player.STATE_BUFFERING) {
             tryNextSource("Buffering timeout setelah 15 detik")
@@ -552,8 +553,13 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    /** YouTube-like fullscreen overlay: explicit back-to-window and quality controls. */
+    /** Player overlay controls inspired by the ION TV layout. These sit over the video,
+     * so opening settings/quality never navigates away from or stops playback. */
     private fun setupFullscreenOverlayControls() {
+        val overlay = FrameLayout(this).apply {
+            isClickable = false
+            isFocusable = false
+        }
         val back = TextView(this).apply {
             text = "‹"
             textSize = 38f
@@ -563,34 +569,75 @@ class MainActivity : AppCompatActivity() {
             contentDescription = "Keluar dari layar penuh"
             isClickable = true
             isFocusable = true
+            visibility = View.GONE
             setOnClickListener { toggleFullscreen(false) }
         }
-        val quality = TextView(this).apply {
-            text = "⚙  Kualitas"
-            textSize = 14f
-            gravity = Gravity.CENTER
-            setPadding(dp(14), 0, dp(14), 0)
-            setTextColor(Color.WHITE)
-            background = rounded("#99000000", "#55FFFFFF", 22)
-            contentDescription = "Pilih resolusi video"
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { showVideoQualityDialog() }
+        val topControls = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(6), dp(4), dp(6), dp(4))
+            background = rounded("#99000000", "#33FFFFFF", 22)
         }
-        val overlay = FrameLayout(this)
-        val backParams = FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP or Gravity.START).apply {
-            setMargins(dp(14), dp(14), 0, 0)
+        fun overlayButton(symbol: String, description: String, action: () -> Unit): TextView {
+            return TextView(this).apply {
+                text = symbol
+                textSize = 22f
+                gravity = Gravity.CENTER
+                setTextColor(Color.WHITE)
+                contentDescription = description
+                isClickable = true
+                isFocusable = true
+                background = rounded("#22000000", "#00000000", 18)
+                setOnClickListener { action() }
+                layoutParams = LinearLayout.LayoutParams(dp(44), dp(42))
+            }
         }
-        val qualityParams = FrameLayout.LayoutParams(dp(126), dp(44), Gravity.TOP or Gravity.END).apply {
-            setMargins(0, dp(16), dp(14), 0)
+        lateinit var mute: TextView
+        mute = overlayButton("🔊", "Bisukan atau aktifkan suara") {
+            val exo = player ?: return@overlayButton
+            val muted = exo.volume > 0f
+            exo.volume = if (muted) 0f else 1f
+            muteLabelUpdate(mute, muted)
+        }
+        val settings = overlayButton("⚙", "Pengaturan pemutar") {
+            showSettingsDialog()
+        }
+        val quality = overlayButton("▣", "Pilih resolusi video") {
+            showVideoQualityDialog()
+        }
+        val fullscreen = overlayButton("⛶", "Masuk atau keluar layar penuh") {
+            toggleFullscreen(!isFullscreen)
+        }
+        topControls.addView(mute)
+        topControls.addView(settings)
+        topControls.addView(quality)
+        topControls.addView(fullscreen)
+
+        val backParams = FrameLayout.LayoutParams(dp(46), dp(46), Gravity.TOP or Gravity.START).apply {
+            setMargins(dp(10), dp(10), 0, 0)
+        }
+        val topParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, dp(50), Gravity.TOP or Gravity.END).apply {
+            setMargins(0, dp(10), dp(10), 0)
         }
         overlay.addView(back, backParams)
-        overlay.addView(quality, qualityParams)
-        overlay.visibility = View.GONE
+        overlay.addView(topControls, topParams)
+        overlay.visibility = View.VISIBLE
         binding.playerContainer.addView(overlay, FrameLayout.LayoutParams(-1, -1))
         fullscreenBackButton = back
         fullscreenQualityButton = quality
         fullscreenOverlay = overlay
+        showPlayerOverlayTemporarily()
+    }
+
+    private fun showPlayerOverlayTemporarily() {
+        fullscreenOverlay?.visibility = View.VISIBLE
+        mainHandler.removeCallbacks(playerOverlayHideRunnable)
+        mainHandler.postDelayed(playerOverlayHideRunnable, 4000L)
+    }
+
+    private fun muteLabelUpdate(button: TextView, muted: Boolean) {
+        button.text = if (muted) "🔇" else "🔊"
+        button.contentDescription = if (muted) "Aktifkan suara" else "Bisukan suara"
     }
 
     @OptIn(UnstableApi::class)
@@ -634,6 +681,7 @@ class MainActivity : AppCompatActivity() {
             if (!settingsPrefs.getBoolean("setting_gesture", true)) return@setOnTouchListener false
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
+                    showPlayerOverlayTemporarily()
                     touchStartX = event.x
                     touchStartY = event.y
                     false
@@ -1005,6 +1053,8 @@ class MainActivity : AppCompatActivity() {
         isFullscreen = enable
         if (enable) {
             fullscreenOverlay?.visibility = View.VISIBLE
+            fullscreenBackButton?.visibility = View.VISIBLE
+            showPlayerOverlayTemporarily()
             binding.headerBar.visibility = View.GONE
             binding.welcomePanel.visibility = View.GONE
             binding.statsBar.visibility = View.GONE
@@ -1028,7 +1078,9 @@ class MainActivity : AppCompatActivity() {
                 View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
             )
         } else {
-            fullscreenOverlay?.visibility = View.GONE
+            fullscreenOverlay?.visibility = View.VISIBLE
+            fullscreenBackButton?.visibility = View.GONE
+            showPlayerOverlayTemporarily()
             binding.headerBar.visibility = View.VISIBLE
             binding.welcomePanel.visibility = View.GONE
             binding.statsBar.visibility = View.GONE
