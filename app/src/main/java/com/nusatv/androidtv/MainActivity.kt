@@ -133,6 +133,7 @@ class MainActivity : AppCompatActivity() {
     private fun setupControls() {
         binding.btnFilterIndo.visibility = View.VISIBLE
         binding.btnFilterIndo.text = if (selectedCategory == "Events") "Events Live ▼" else "$selectedCategory ▼"
+        binding.btnFilterIndo.setTextColor(Color.WHITE)
 
         // Keep the channel list directly under the server tabs on phone and TV.
         // Playback status and channel-count banners are intentionally hidden.
@@ -255,6 +256,7 @@ class MainActivity : AppCompatActivity() {
                 else -> category
             }
             binding.tvSectionTitle.text = displayCategory
+            binding.tvSectionTitle.setTextColor(Color.WHITE)
             binding.btnFilterIndo.text = "$displayCategory ▼"
             updateServerTabs()
             if (isAndroidTv && !isFullscreen && filteredChannels.isNotEmpty()) {
@@ -329,21 +331,42 @@ class MainActivity : AppCompatActivity() {
         }
         labels.forEachIndexed { index, label ->
             val selected = values[index] == selectedCategory
-            val item = TextView(this).apply {
-                text = (if (selected) "●   " else "○   ") + label
-                textSize = 15f
-                typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-                setTextColor(if (selected) Color.parseColor("#D0B5FF") else Color.WHITE)
+            val item = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(16), dp(14), dp(12), dp(14))
+                setPadding(dp(16), 0, dp(16), 0)
                 background = rounded(if (selected) "#332A49" else "#1D2029",
                     if (selected) "#B99AFB" else "#1D2029", 12)
                 isClickable = true
+                isFocusable = true
                 setOnClickListener {
                     selectedCategory = values[index]
                     categoryDialog?.dismiss()
                     applyFilter()
                 }
+            }
+            val name = TextView(this).apply {
+                // Keep category names white; only the LIVE badge is red.
+                text = (if (selected) "●   " else "○   ") +
+                    if (values[index] == "Events") "Events" else label
+                textSize = 15f
+                typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                setTextColor(if (selected) Color.parseColor("#D0B5FF") else Color.WHITE)
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            item.addView(name, LinearLayout.LayoutParams(0, -1, 1f))
+            if (values[index] == "Events") {
+                val liveBadge = TextView(this).apply {
+                    text = "LIVE"
+                    textSize = 13f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(Color.WHITE)
+                    gravity = Gravity.CENTER
+                    setPadding(dp(12), dp(5), dp(12), dp(5))
+                    background = rounded("#FF3038", "#FF3038", 20)
+                    isClickable = false
+                }
+                item.addView(liveBadge, LinearLayout.LayoutParams(-2, -2))
             }
             list.addView(item, LinearLayout.LayoutParams(-1, dp(48)).apply {
                 bottomMargin = dp(5)
@@ -873,7 +896,7 @@ class MainActivity : AppCompatActivity() {
         currentChannel = null
         if (isFullscreen) {
             setFullscreenUi(false)
-            if (!isAndroidTv) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            if (!isAndroidTv) applyRotationSetting(settingsPrefs.getString("setting_rotation", "Auto") ?: "Auto")
         }
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         adapter.setSelectedChannel(null)
@@ -889,7 +912,8 @@ class MainActivity : AppCompatActivity() {
             setFullscreenUi(true)
             return
         }
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        // Lock the current orientation: fullscreen works in portrait and landscape.
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LOCKED
         setFullscreenUi(true)
     }
 
@@ -901,31 +925,43 @@ class MainActivity : AppCompatActivity() {
             binding.welcomePanel.visibility = View.GONE
             binding.statsBar.visibility = View.GONE
             binding.rvChannels.visibility = View.GONE
+            binding.serverTabsScroll.visibility = View.GONE
+            binding.etSearch.visibility = View.GONE
             binding.playerContainer.layoutParams = binding.playerContainer.layoutParams.apply {
+                width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
                 height = android.view.ViewGroup.LayoutParams.MATCH_PARENT
             }
+            binding.playerView.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             window.decorView.systemUiVisibility = (
                 View.SYSTEM_UI_FLAG_FULLSCREEN or
                 View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
                 View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
             )
         } else {
             binding.headerBar.visibility = View.VISIBLE
             binding.welcomePanel.visibility = View.GONE
             binding.statsBar.visibility = View.GONE
             binding.rvChannels.visibility = View.VISIBLE
+            binding.serverTabsScroll.visibility = View.VISIBLE
+            binding.etSearch.visibility = View.GONE
             val density = resources.displayMetrics.density
             binding.playerContainer.layoutParams = binding.playerContainer.layoutParams.apply {
+                width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
                 height = (210 * density).toInt()
             }
+            binding.playerView.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
         }
     }
 
     private fun toggleFullscreen(enable: Boolean) {
         if (enable) requestLandscapeFullscreen() else {
-            if (!isAndroidTv) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            if (!isAndroidTv) applyRotationSetting(settingsPrefs.getString("setting_rotation", "Auto") ?: "Auto")
             setFullscreenUi(false)
         }
     }
@@ -933,13 +969,8 @@ class MainActivity : AppCompatActivity() {
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
         if (isAndroidTv) return
-        val landscape = newConfig.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-        setFullscreenUi(landscape)
-        // Once landscape has been reached, release the temporary lock so the
-        // user can rotate back to portrait and automatically see the channel list.
-        if (landscape && requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE) {
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        }
+        // Do not exit fullscreen when Android reports a configuration change.
+        if (isFullscreen) setFullscreenUi(true)
     }
 
     private fun changeChannel(step: Int): Boolean {
@@ -953,7 +984,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK && isFullscreen) {
-            if (!isAndroidTv) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            if (!isAndroidTv) applyRotationSetting(settingsPrefs.getString("setting_rotation", "Auto") ?: "Auto")
             setFullscreenUi(false)
             return true
         }
