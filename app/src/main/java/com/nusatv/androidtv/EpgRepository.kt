@@ -39,6 +39,8 @@ object EpgRepository {
                 val request = Request.Builder()
                     .url(url)
                     .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0")
+                    .header("Referer", "https://www.rctiplus.com/")
+                    .header("Origin", "https://www.rctiplus.com")
                     .header("Accept", "application/xml, text/xml, */*")
                     .build()
                 client.newCall(request).execute().use { response ->

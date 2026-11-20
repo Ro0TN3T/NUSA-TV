@@ -21,9 +21,9 @@ object PlaylistRepository {
         .build()
 
     private val NATIONAL_PRIORITY = listOf(
-        "rcti", "sctv", "indosiar", "mnctv", "gtv", "antv",
-        "trans tv", "trans7", "tvri", "tvri nasional", "tv one",
-        "metro tv", "kompas tv", "inews", "moji", "rtv",
+        "antv", "trans tv", "trans7", "rtv", "gtv", "rcti",
+        "sctv", "Indosiar", "tvri", "tvri nasional", "tv one",
+        "metro tv", "kompas tv", "inews", "moji", "mnctv",
         "net", "mdtv", "cnn indonesia", "cnbc indonesia", "btv", "sin po tv", "garuda tv", "nusantara tv"
     )
 

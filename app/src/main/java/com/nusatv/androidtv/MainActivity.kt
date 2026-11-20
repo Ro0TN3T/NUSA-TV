@@ -931,7 +931,9 @@ class MainActivity : AppCompatActivity() {
                 width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
                 height = android.view.ViewGroup.LayoutParams.MATCH_PARENT
             }
-            binding.playerView.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            // Keep the complete broadcast frame visible in fullscreen. ZOOM crops
+            // the edges and makes embedded channel watermarks appear oversized.
+            binding.playerView.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             window.decorView.systemUiVisibility = (
                 View.SYSTEM_UI_FLAG_FULLSCREEN or
