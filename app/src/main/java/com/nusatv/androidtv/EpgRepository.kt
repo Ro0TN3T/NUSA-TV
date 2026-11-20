@@ -25,11 +25,7 @@ object EpgRepository {
         .followRedirects(true)
         .build()
 
-    private val feedUrls = listOf(
-        "https://iptv-epg.org/files/epg-id.xml",
-        "https://raw.githubusercontent.com/apistech/project/refs/heads/main/epgs/guide.xml",
-        DefaultSources.XMLTV_URL
-    ).distinct()
+    private val feedUrls = EpgSources.XMLTV_FEEDS
 
     suspend fun loadSchedules(): Map<String, EpgSchedule> = withContext(Dispatchers.IO) {
         val merged = HashMap<String, EpgSchedule>()

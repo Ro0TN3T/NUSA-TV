@@ -25,6 +25,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.widget.LinearLayout
+import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import android.view.WindowManager
@@ -36,6 +37,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -77,6 +79,9 @@ class MainActivity : AppCompatActivity() {
     private var isTryingFallback = false
     private var playbackGeneration = 0
     private var isRefreshingEpg = false
+    private var fullscreenBackButton: TextView? = null
+    private var fullscreenQualityButton: TextView? = null
+    private var fullscreenOverlay: View? = null
     private val settingsPrefs by lazy { getSharedPreferences("nusa_settings", MODE_PRIVATE) }
     private var touchStartX = 0f
     private var touchStartY = 0f
@@ -148,6 +153,7 @@ class MainActivity : AppCompatActivity() {
             toggleFullscreen(!isFullscreen)
         }
         setupSwipeGestures()
+        setupFullscreenOverlayControls()
 
         binding.btnReload.text = "⚙"
         binding.btnReload.contentDescription = "Pengaturan"
@@ -546,6 +552,83 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    /** YouTube-like fullscreen overlay: explicit back-to-window and quality controls. */
+    private fun setupFullscreenOverlayControls() {
+        val back = TextView(this).apply {
+            text = "‹"
+            textSize = 38f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = rounded("#99000000", "#55FFFFFF", 28)
+            contentDescription = "Keluar dari layar penuh"
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { toggleFullscreen(false) }
+        }
+        val quality = TextView(this).apply {
+            text = "⚙  Kualitas"
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setPadding(dp(14), 0, dp(14), 0)
+            setTextColor(Color.WHITE)
+            background = rounded("#99000000", "#55FFFFFF", 22)
+            contentDescription = "Pilih resolusi video"
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { showVideoQualityDialog() }
+        }
+        val overlay = FrameLayout(this)
+        val backParams = FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP or Gravity.START).apply {
+            setMargins(dp(14), dp(14), 0, 0)
+        }
+        val qualityParams = FrameLayout.LayoutParams(dp(126), dp(44), Gravity.TOP or Gravity.END).apply {
+            setMargins(0, dp(16), dp(14), 0)
+        }
+        overlay.addView(back, backParams)
+        overlay.addView(quality, qualityParams)
+        overlay.visibility = View.GONE
+        binding.playerContainer.addView(overlay, FrameLayout.LayoutParams(-1, -1))
+        fullscreenBackButton = back
+        fullscreenQualityButton = quality
+        fullscreenOverlay = overlay
+    }
+
+    @OptIn(UnstableApi::class)
+    private fun showVideoQualityDialog() {
+        val exo = player ?: return
+        data class QualityOption(val label: String, val group: androidx.media3.common.TrackGroup, val index: Int)
+        val options = mutableListOf<QualityOption>()
+        exo.currentTracks.groups.forEach { group ->
+            if (group.type == C.TRACK_TYPE_VIDEO) {
+                for (index in 0 until group.length) {
+                    if (!group.isTrackSupported(index)) continue
+                    val format = group.getTrackFormat(index)
+                    if (format.height > 0) {
+                        val label = if (format.width > 0) "${format.height}p (${format.width}×${format.height})" else "${format.height}p"
+                        options.add(QualityOption(label, group.mediaTrackGroup, index))
+                    }
+                }
+            }
+        }
+        val unique = options.distinctBy { it.label }.sortedByDescending { it.group.getFormat(it.index).height }
+        val labels = listOf("Otomatis (adaptif)") + unique.map { it.label }
+        AlertDialog.Builder(this)
+            .setTitle("Kualitas / Resolusi video")
+            .setItems(labels.toTypedArray()) { _, which ->
+                val builder = exo.trackSelectionParameters.buildUpon()
+                if (which == 0) {
+                    builder.clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                } else {
+                    val selected = unique[which - 1]
+                    builder.clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                    builder.addOverride(TrackSelectionOverride(selected.group, listOf(selected.index)))
+                }
+                exo.trackSelectionParameters = builder.build()
+            }
+            .setNegativeButton("Tutup", null)
+            .show()
+    }
+
     private fun setupSwipeGestures() {
         binding.playerView.setOnTouchListener { _, event ->
             if (!settingsPrefs.getBoolean("setting_gesture", true)) return@setOnTouchListener false
@@ -921,6 +1004,7 @@ class MainActivity : AppCompatActivity() {
         if (isAndroidTv && !enable) return
         isFullscreen = enable
         if (enable) {
+            fullscreenOverlay?.visibility = View.VISIBLE
             binding.headerBar.visibility = View.GONE
             binding.welcomePanel.visibility = View.GONE
             binding.statsBar.visibility = View.GONE
@@ -944,6 +1028,7 @@ class MainActivity : AppCompatActivity() {
                 View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
             )
         } else {
+            fullscreenOverlay?.visibility = View.GONE
             binding.headerBar.visibility = View.VISIBLE
             binding.welcomePanel.visibility = View.GONE
             binding.statsBar.visibility = View.GONE

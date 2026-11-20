@@ -40,3 +40,13 @@ object DefaultSources {
     const val REMOTE_PLAYLIST =
         "https://spring-grass-97c6.nusatv.workers.dev/api/playlist.m3u"
 }
+
+
+/** Centralized XMLTV guide sources used by the EPG repository. */
+object EpgSources {
+    val XMLTV_FEEDS = listOf(
+        "https://iptv-epg.org/files/epg-id.xml",
+        "https://raw.githubusercontent.com/apistech/project/refs/heads/main/epgs/guide.xml",
+        DefaultSources.XMLTV_URL
+    ).distinct()
+}
