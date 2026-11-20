@@ -1,6 +1,9 @@
 package com.nusatv.androidtv
 
 import android.os.Bundle
+import android.os.Build
+import android.app.PictureInPictureParams
+import android.util.Rational
 import android.os.Handler
 import android.os.Looper
 import android.content.pm.PackageManager
@@ -8,6 +11,14 @@ import android.content.pm.ActivityInfo
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.KeyEvent
+import android.view.MotionEvent
+import android.media.AudioManager
+import android.widget.ScrollView
+import android.widget.RadioGroup
+import android.widget.RadioButton
+import android.widget.Switch
+import android.widget.Button
+import android.content.res.Configuration
 import android.view.View
 import android.view.Gravity
 import android.graphics.Color
@@ -66,6 +77,9 @@ class MainActivity : AppCompatActivity() {
     private var isTryingFallback = false
     private var playbackGeneration = 0
     private var isRefreshingEpg = false
+    private val settingsPrefs by lazy { getSharedPreferences("nusa_settings", MODE_PRIVATE) }
+    private var touchStartX = 0f
+    private var touchStartY = 0f
     private val mainHandler = Handler(Looper.getMainLooper())
     private val bufferingTimeout = Runnable {
         if (player?.playbackState == Player.STATE_BUFFERING) {
@@ -89,6 +103,8 @@ class MainActivity : AppCompatActivity() {
 
         setupRecyclerView()
         setupControls()
+        applyRotationSetting(settingsPrefs.getString("setting_rotation", "Auto") ?: "Auto")
+        applyThemeSetting(settingsPrefs.getString("setting_theme", "Dark") ?: "Dark")
 
         allChannels = ChannelCache.channels
         if (allChannels.isEmpty()) {
@@ -116,7 +132,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupControls() {
         binding.btnFilterIndo.visibility = View.VISIBLE
-        binding.btnFilterIndo.text = "$selectedCategory ▼"
+        binding.btnFilterIndo.text = if (selectedCategory == "Events") "Events Live ▼" else "$selectedCategory ▼"
 
         // Keep the channel list directly under the server tabs on phone and TV.
         // Playback status and channel-count banners are intentionally hidden.
@@ -130,10 +146,11 @@ class MainActivity : AppCompatActivity() {
         binding.playerContainer.setOnClickListener {
             toggleFullscreen(!isFullscreen)
         }
+        setupSwipeGestures()
 
-        binding.btnReload.setOnClickListener {
-            reloadPlaylists()
-        }
+        binding.btnReload.text = "⚙"
+        binding.btnReload.contentDescription = "Pengaturan"
+        binding.btnReload.setOnClickListener { showSettingsDialog() }
 
         binding.btnStop.text = "⛶"
         binding.btnStop.contentDescription = "Perbesar layar"
@@ -188,7 +205,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 val updated = withContext(Dispatchers.Default) {
                     allChannels.map { channel ->
-                        val schedule = channel.tvgId?.let { schedules[it] }
+                        val schedule = channel.tvgId?.let { schedules[it] ?: normalizedSchedules[PlaylistRepository.canonicalName(it)] }
                             ?: schedules[channel.key]
                             ?: normalizedSchedules[channel.key]
                         channel.copy(
@@ -199,7 +216,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 allChannels = updated
                 if (allChannels.isNotEmpty()) applyFilter()
-                binding.tvStatus.text = "EPG berhasil diperbarui • XMLTV"
+                binding.tvStatus.text = "Jadwal acara berhasil diperbarui"
             } catch (_: Exception) {
                 // EPG is optional: live playback and channel list remain available.
                 binding.tvStatus.text = "Jadwal EPG belum tersedia • Siaran tetap berjalan"
@@ -232,8 +249,13 @@ class MainActivity : AppCompatActivity() {
             if (requestId != filterGeneration || isFinishing || isDestroyed) return@launch
             adapter.submitList(filteredChannels, currentChannel?.key)
             binding.tvStats.text = "${filteredChannels.size} channel"
-            binding.tvSectionTitle.text = if (category == "Semua") "Daftar Channel" else category
-            binding.btnFilterIndo.text = "$category ▼"
+            val displayCategory = when (category) {
+                "Semua" -> "Semua Channel"
+                "Events" -> "Events Live"
+                else -> category
+            }
+            binding.tvSectionTitle.text = displayCategory
+            binding.btnFilterIndo.text = "$displayCategory ▼"
             updateServerTabs()
             if (isAndroidTv && !isFullscreen && filteredChannels.isNotEmpty()) {
                 binding.rvChannels.post {
@@ -282,42 +304,287 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showCategoryDialog() {
-        // Use the platform's lightweight single-choice dialog. The previous custom
-        // nested row layout could lose click/focus handling on some Android devices.
-        val labels = arrayOf(
-            "Semua Channel",
-            "Events Live • XMLTV",
-            "Indonesia",
-            "Kids",
-            "Knowledge",
-            "Premium Movie",
-            "Religi",
-            "Sports",
-            "News"
-        )
-        val values = arrayOf(
-            "Semua", "Events", "Indonesia", "Kids", "Knowledge",
-            "Premium Movie", "Religi", "Sports", "News"
-        )
-        val selectedIndex = values.indexOf(selectedCategory).coerceAtLeast(0)
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Pilih Kategori")
-            .setSingleChoiceItems(labels, selectedIndex) { dialogInterface, which ->
-                selectedCategory = values[which]
-                dialogInterface.dismiss()
-                applyFilter()
+        val labels = listOf("Semua Channel", "Events Live", "Indonesia", "Kids", "Knowledge",
+            "Premium Movie", "Religi", "Sports", "News")
+        val values = listOf("Semua", "Events", "Indonesia", "Kids", "Knowledge",
+            "Premium Movie", "Religi", "Sports", "News")
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(16), dp(18), dp(14))
+            background = rounded("#242631", "#414451", 22)
+        }
+        val title = TextView(this).apply {
+            text = "Pilih Kategori"
+            textSize = 20f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp(4), dp(2), dp(4), dp(12))
+        }
+        panel.addView(title)
+        val scroll = ScrollView(this)
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(4), 0, dp(4), 0)
+            background = rounded("#1D2029", "#393D49", 16)
+        }
+        labels.forEachIndexed { index, label ->
+            val selected = values[index] == selectedCategory
+            val item = TextView(this).apply {
+                text = (if (selected) "●   " else "○   ") + label
+                textSize = 15f
+                typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                setTextColor(if (selected) Color.parseColor("#D0B5FF") else Color.WHITE)
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(16), dp(14), dp(12), dp(14))
+                background = rounded(if (selected) "#332A49" else "#1D2029",
+                    if (selected) "#B99AFB" else "#1D2029", 12)
+                isClickable = true
+                setOnClickListener {
+                    selectedCategory = values[index]
+                    categoryDialog?.dismiss()
+                    applyFilter()
+                }
             }
-            .setNegativeButton("Batal", null)
-            .create()
+            list.addView(item, LinearLayout.LayoutParams(-1, dp(48)).apply {
+                bottomMargin = dp(5)
+            })
+        }
+        scroll.addView(list)
+        panel.addView(scroll, LinearLayout.LayoutParams(-1, dp(360)))
+        val dialog = AlertDialog.Builder(this).setView(panel)
+            .setNegativeButton("Tutup", null).create()
         categoryDialog = dialog
         dialog.setOnShowListener {
             dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-            dialog.window?.setLayout(
-                (resources.displayMetrics.widthPixels * 0.88f).toInt(),
-                WindowManager.LayoutParams.WRAP_CONTENT
-            )
+            dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.88f).toInt(),
+                WindowManager.LayoutParams.WRAP_CONTENT)
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(Color.parseColor("#CBB1FF"))
         }
         dialog.show()
+    }
+
+    private fun showSettingsDialog() {
+        val purple = Color.parseColor("#C8A9FF")
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(18), dp(20), dp(16))
+            background = rounded("#30323D", "#30323D", 24)
+        }
+        val title = TextView(this).apply {
+            text = "Pengaturan Fitur"
+            textSize = 21f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            setPadding(0, 0, 0, dp(14))
+        }
+        panel.addView(title)
+        val inner = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            background = rounded("#22252F", "#414451", 18)
+        }
+        fun addSwitchRow(label: String, description: String, key: String, defaultValue: Boolean): Switch {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(4), dp(9), dp(4), dp(9))
+            }
+            val sw = Switch(this).apply {
+                text = label
+                textSize = 16f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                isChecked = settingsPrefs.getBoolean(key, defaultValue)
+                buttonTintList = android.content.res.ColorStateList.valueOf(purple)
+            }
+            val desc = TextView(this).apply {
+                text = description
+                textSize = 13f
+                setTextColor(Color.parseColor("#C0C1CA"))
+                setPadding(0, dp(3), dp(4), 0)
+            }
+            row.addView(sw)
+            row.addView(desc)
+            inner.addView(row)
+            return sw
+        }
+        val pipSwitch = addSwitchRow("Picture-in-Picture (PiP)",
+            "Izinkan video tetap berjalan melayang.", "setting_pip", false)
+        val gestureSwitch = addSwitchRow("Gesture Swipe Layar",
+            "Gunakan usapan vertikal di sisi kiri untuk kecerahan dan sisi kanan untuk volume.",
+            "setting_gesture", true)
+
+        fun addDivider() {
+            val line = View(this).apply { setBackgroundColor(Color.parseColor("#454956")) }
+            inner.addView(line, LinearLayout.LayoutParams(-1, dp(1)).apply {
+                topMargin = dp(5); bottomMargin = dp(5)
+            })
+        }
+        addDivider()
+        val rotationTitle = TextView(this).apply {
+            text = "Rotasi Layar"
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            setPadding(dp(4), dp(8), 0, dp(8))
+        }
+        inner.addView(rotationTitle)
+        val rotation = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
+        val rotationValues = listOf("Portrait", "Landscape", "Auto")
+        val rotationIds = listOf(View.generateViewId(), View.generateViewId(), View.generateViewId())
+        rotationValues.forEachIndexed { index, label ->
+            val rb = RadioButton(this).apply {
+                id = rotationIds[index]
+                text = label
+                textSize = 12f
+                setTextColor(purple)
+                buttonTintList = android.content.res.ColorStateList.valueOf(purple)
+                layoutParams = RadioGroup.LayoutParams(0, dp(44), 1f)
+            }
+            rotation.addView(rb)
+        }
+        val savedRotation = settingsPrefs.getString("setting_rotation", "Auto")
+        rotation.check(rotationIds[rotationValues.indexOf(savedRotation).takeIf { it >= 0 } ?: 2])
+        inner.addView(rotation)
+        addDivider()
+        val themeTitle = TextView(this).apply {
+            text = "Tema Aplikasi"
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            setPadding(dp(4), dp(8), 0, dp(8))
+        }
+        inner.addView(themeTitle)
+        val theme = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
+        val themeValues = listOf("Light", "Dark", "Auto")
+        val themeIds = themeValues.map { View.generateViewId() }
+        themeValues.forEachIndexed { index, label ->
+            theme.addView(RadioButton(this).apply {
+                id = themeIds[index]
+                text = label
+                textSize = 12f
+                setTextColor(purple)
+                buttonTintList = android.content.res.ColorStateList.valueOf(purple)
+                layoutParams = RadioGroup.LayoutParams(0, dp(44), 1f)
+            })
+        }
+        val savedTheme = settingsPrefs.getString("setting_theme", "Dark")
+        theme.check(themeIds[themeValues.indexOf(savedTheme).takeIf { it >= 0 } ?: 1])
+        inner.addView(theme)
+        panel.addView(inner)
+        val reload = Button(this).apply {
+            text = "Perbarui Playlist"
+            isAllCaps = false
+            setTextColor(Color.WHITE)
+            background = rounded("#3A3D49", "#555968", 18)
+            setOnClickListener {
+                categoryDialog?.dismiss()
+                reloadPlaylists()
+            }
+        }
+        panel.addView(reload, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(10) })
+
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(14), 0, 0)
+        }
+        val cancel = Button(this).apply {
+            text = "Batal"; isAllCaps = false; setTextColor(Color.WHITE)
+            background = rounded("#252832", "#252832", 28)
+        }
+        val apply = Button(this).apply {
+            text = "Apply"; isAllCaps = false; setTextColor(Color.WHITE)
+            background = rounded("#078DCE", "#078DCE", 28)
+        }
+        actions.addView(cancel, LinearLayout.LayoutParams(0, dp(54), 1f).apply { marginEnd = dp(8) })
+        actions.addView(apply, LinearLayout.LayoutParams(0, dp(54), 1f).apply { marginStart = dp(8) })
+        panel.addView(actions)
+
+        val dialog = AlertDialog.Builder(this).setView(panel).create()
+        categoryDialog = dialog
+        cancel.setOnClickListener { dialog.dismiss() }
+        apply.setOnClickListener {
+            val rotationChoice = rotationValues[rotationIds.indexOf(rotation.checkedRadioButtonId).coerceAtLeast(0)]
+            val themeChoice = themeValues[themeIds.indexOf(theme.checkedRadioButtonId).coerceAtLeast(0)]
+            settingsPrefs.edit()
+                .putBoolean("setting_pip", pipSwitch.isChecked)
+                .putBoolean("setting_gesture", gestureSwitch.isChecked)
+                .putString("setting_rotation", rotationChoice)
+                .putString("setting_theme", themeChoice)
+                .apply()
+            applyRotationSetting(rotationChoice)
+            applyThemeSetting(themeChoice)
+            dialog.dismiss()
+        }
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+            dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.88f).toInt(),
+                WindowManager.LayoutParams.WRAP_CONTENT)
+        }
+        dialog.show()
+    }
+
+    private fun setupSwipeGestures() {
+        binding.playerView.setOnTouchListener { _, event ->
+            if (!settingsPrefs.getBoolean("setting_gesture", true)) return@setOnTouchListener false
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    touchStartX = event.x
+                    touchStartY = event.y
+                    false
+                }
+                MotionEvent.ACTION_UP -> {
+                    val deltaY = touchStartY - event.y
+                    if (kotlin.math.abs(deltaY) < dp(35)) return@setOnTouchListener false
+                    val direction = if (deltaY > 0) 1 else -1
+                    if (touchStartX < binding.playerView.width / 2f) {
+                        val attrs = window.attributes
+                        val current = if (attrs.screenBrightness < 0f) 0.5f else attrs.screenBrightness
+                        attrs.screenBrightness = (current + direction * 0.08f).coerceIn(0.05f, 1f)
+                        window.attributes = attrs
+                    } else {
+                        val audio = getSystemService(AUDIO_SERVICE) as AudioManager
+                        audio.adjustStreamVolume(AudioManager.STREAM_MUSIC,
+                            if (direction > 0) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER,
+                            AudioManager.FLAG_SHOW_UI)
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            settingsPrefs.getBoolean("setting_pip", false) &&
+            (player?.isPlaying == true || player?.playWhenReady == true)) {
+            val params = PictureInPictureParams.Builder()
+                .setAspectRatio(Rational(16, 9))
+                .build()
+            runCatching { enterPictureInPictureMode(params) }
+        }
+    }
+
+    private fun applyRotationSetting(value: String) {
+        if (isAndroidTv) return
+        requestedOrientation = when (value) {
+            "Portrait" -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            "Landscape" -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
+    private fun applyThemeSetting(value: String) {
+        val dark = when (value) {
+            "Light" -> false
+            "Auto" -> (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) != Configuration.UI_MODE_NIGHT_YES
+            else -> true
+        }
+        binding.root.setBackgroundColor(Color.parseColor(if (dark) "#090A11" else "#F2F3F7"))
+        binding.headerBar.setBackgroundColor(Color.parseColor(if (dark) "#141622" else "#FFFFFF"))
+        findViewById<View>(R.id.serverTabsScroll)?.setBackgroundColor(Color.parseColor(if (dark) "#141622" else "#FFFFFF"))
+        binding.rvChannels.setBackgroundColor(Color.parseColor(if (dark) "#090A11" else "#F2F3F7"))
     }
 
     private fun channelMatchesCategory(channel: TvChannel, category: String): Boolean {
@@ -371,6 +638,7 @@ class MainActivity : AppCompatActivity() {
 
         updateServerTabs()
         binding.tvLiveLabel.text = "● LIVE • SEDANG MEMUAT"
+        binding.tvLiveLabel.setTextColor(Color.parseColor("#FF3B4F"))
         binding.tvWelcomeTitle.text = channel.name
         binding.tvWelcomeDesc.text = buildString {
             val now = channel.currentProgramTitle
@@ -393,6 +661,11 @@ class MainActivity : AppCompatActivity() {
         // HLS uses the same factory for the master/media playlists and media segments.
         val headersMap = linkedMapOf<String, String>()
         candidate.userAgent.takeIf { it.isNotBlank() }?.let { headersMap["User-Agent"] = it }
+        if (runCatching { java.net.URI(candidate.url).host.orEmpty().contains("rctiplus.com", true) }.getOrDefault(false)) {
+            headersMap["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0"
+            headersMap["Referer"] = "https://www.rctiplus.com/"
+            headersMap["Origin"] = "https://www.rctiplus.com"
+        }
         candidate.referer?.takeIf { it.isNotBlank() }?.let { headersMap["Referer"] = it }
         candidate.origin?.takeIf { it.isNotBlank() }?.let { headersMap["Origin"] = it }
 
@@ -488,6 +761,7 @@ class MainActivity : AppCompatActivity() {
                                 transientRetryCount = 0
                                 isTryingFallback = false
                                 binding.tvLiveLabel.text = "● LIVE • SEDANG DIPUTAR"
+                                binding.tvLiveLabel.setTextColor(Color.parseColor("#FF3B4F"))
                                 binding.tvStatus.text = "LIVE • ${candidate.sourceName}"
                             }
                             Player.STATE_BUFFERING -> {
@@ -583,6 +857,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             isTryingFallback = false
             binding.tvLiveLabel.text = "● GAGAL DIPUTAR"
+            binding.tvLiveLabel.setTextColor(Color.parseColor("#FF3B4F"))
             binding.tvStatus.text = "Gagal memutar ${ch.name}. $reason. Coba link lain atau periksa akses sumber."
             if (isFullscreen) toggleFullscreen(false)
         }

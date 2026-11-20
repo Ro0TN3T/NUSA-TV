@@ -50,7 +50,7 @@
             android:visibility="visible"
             android:layout_width="wrap_content"
             android:layout_height="44dp"
-            android:backgroundTint="#1762D7"
+            android:backgroundTint="#343744"
             android:minWidth="112dp"
             android:paddingStart="14dp"
             android:paddingEnd="14dp"
@@ -67,10 +67,10 @@
             android:backgroundTint="#1762D7"
             android:minWidth="0dp"
             android:padding="0dp"
-            android:text="＋"
+            android:text="⚙"
             android:textColor="#FFFFFF"
             android:textSize="24sp"
-            android:contentDescription="Muat ulang playlist" />
+            android:contentDescription="Pengaturan" />
         <Button
             android:id="@+id/btnStop"
             android:layout_width="46dp"
@@ -142,7 +142,7 @@
         android:paddingEnd="16dp"
         android:paddingTop="7dp"
         android:paddingBottom="8dp">
-        <TextView android:id="@+id/tvLiveLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="● LIVE  •  NUSA TV" android:textColor="#18D7E8" android:textSize="11sp" android:textStyle="bold" />
+        <TextView android:id="@+id/tvLiveLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="● LIVE  •  NUSA TV" android:textColor="#FF3B4F" android:textSize="11sp" android:textStyle="bold" />
         <TextView android:id="@+id/tvWelcomeTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:maxLines="1" android:text="Pilih channel" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
         <TextView android:id="@+id/tvWelcomeDesc" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:text="Sumber: NUSA TV" android:textColor="#A4A8B8" android:textSize="11sp" />
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:visibility="gone">

@@ -266,14 +266,24 @@ object PlaylistRepository {
                         // itself belongs to a listed provider. CDN hosts must declare their
                         // provider headers explicitly in the M3U metadata; do not guess them.
                         val domainProfile = headerProfileFor(line)
-                        val inferredReferer = currentReferer ?: domainProfile?.referer
-                        val inferredOrigin = currentOrigin ?: domainProfile?.origin
-                        val needsHeader = inferredReferer != null || inferredOrigin != null || currentUserAgent != null
+                        // RCTI+ may deliver media from a CDN hostname. Match the channel
+                        // label as well as the URL host so the supplied first-party headers
+                        // are retained for that channel's stream requests.
+                        val isRctiChannel = canonicalName(currentName).contains("rcti")
+                        val rctiProfile = if (isRctiChannel) DomainHeaderProfile(
+                            "https://www.rctiplus.com/", "https://www.rctiplus.com"
+                        ) else null
+                        val inferredReferer = currentReferer ?: domainProfile?.referer ?: rctiProfile?.referer
+                        val inferredOrigin = currentOrigin ?: domainProfile?.origin ?: rctiProfile?.origin
+                        val inferredUserAgent = currentUserAgent ?: if (isRctiChannel)
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0"
+                        else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                        val needsHeader = inferredReferer != null || inferredOrigin != null || currentUserAgent != null || isRctiChannel
 
                         val candidate = StreamCandidate(
                             url = line,
                             sourceName = source.name,
-                            userAgent = currentUserAgent ?: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                            userAgent = inferredUserAgent,
                             referer = inferredReferer,
                             origin = inferredOrigin,
                             requiresCustomHeader = needsHeader,
