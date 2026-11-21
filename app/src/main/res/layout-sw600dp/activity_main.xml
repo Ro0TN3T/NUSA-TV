@@ -269,6 +269,31 @@
             android:textStyle="bold" />
     </LinearLayout>
 
+    <LinearLayout
+        android:id="@+id/settingsPanel"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:background="#07111F"
+        android:padding="16dp"
+        android:visibility="gone">
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Pengaturan" android:textColor="#168DEB" android:textSize="23sp"
+            android:textStyle="bold" android:paddingBottom="12dp" />
+        <LinearLayout android:id="@+id/settingsTabs" android:layout_width="match_parent"
+            android:layout_height="52dp" android:orientation="horizontal" android:background="#0D1A2A" />
+        <ScrollView android:layout_width="match_parent" android:layout_height="0dp"
+            android:layout_weight="1" android:fillViewport="true">
+            <LinearLayout android:id="@+id/settingsOptions" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:orientation="vertical"
+                android:paddingTop="14dp" android:paddingBottom="18dp" />
+        </ScrollView>
+        <Button android:id="@+id/btnSettingsBack" android:layout_width="match_parent"
+            android:layout_height="50dp" android:text="Kembali ke Daftar Channel"
+            android:textAllCaps="false" android:textColor="#FFFFFF" android:backgroundTint="#078DB8" />
+    </LinearLayout>
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvChannels"
         android:layout_width="match_parent"

@@ -86,7 +86,7 @@ class MainActivity : AppCompatActivity() {
     private var playbackGeneration = 0
     private var isRefreshingEpg = false
     private var fullscreenOverlay: View? = null
-    private var playPauseControl: TextView? = null
+    private var playPauseControl: android.widget.ImageView? = null
     private val settingsPrefs by lazy { getSharedPreferences("nusa_settings", MODE_PRIVATE) }
     private var touchStartX = 0f
     private var touchStartY = 0f
@@ -170,7 +170,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnReload.text = "⚙"
         binding.btnReload.contentDescription = "Pengaturan"
-        binding.btnReload.setOnClickListener { showSettingsDialog() }
+        binding.btnReload.setOnClickListener { showSettingsPage("VIDEO") }
 
         binding.btnStop.text = "⛶"
         binding.btnStop.contentDescription = "Perbesar layar"
@@ -403,167 +403,137 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    private fun showSettingsDialog() {
-        val purple = Color.parseColor("#C8A9FF")
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(18), dp(20), dp(16))
-            background = rounded("#30323D", "#30323D", 24)
-        }
-        val title = TextView(this).apply {
-            text = "Pengaturan Fitur"
-            textSize = 21f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            setPadding(0, 0, 0, dp(14))
-        }
-        panel.addView(title)
-        val inner = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(10), dp(14), dp(10))
-            background = rounded("#22252F", "#414451", 18)
-        }
-        fun addSwitchRow(label: String, description: String, key: String, defaultValue: Boolean): Switch {
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(4), dp(9), dp(4), dp(9))
-            }
-            val sw = Switch(this).apply {
-                text = label
-                textSize = 16f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-                isChecked = settingsPrefs.getBoolean(key, defaultValue)
-                buttonTintList = android.content.res.ColorStateList.valueOf(purple)
-            }
-            val desc = TextView(this).apply {
-                text = description
-                textSize = 13f
-                setTextColor(Color.parseColor("#C0C1CA"))
-                setPadding(0, dp(3), dp(4), 0)
-            }
-            row.addView(sw)
-            row.addView(desc)
-            inner.addView(row)
-            return sw
-        }
-        val pipSwitch = addSwitchRow("Picture-in-Picture (PiP)",
-            "Izinkan video tetap berjalan melayang.", "setting_pip", false)
-        val gestureSwitch = addSwitchRow("Gesture Swipe Layar",
-            "Gunakan usapan vertikal di sisi kiri untuk kecerahan dan sisi kanan untuk volume.",
-            "setting_gesture", true)
+    private var activeSettingsTab = "VIDEO"
 
-        fun addDivider() {
-            val line = View(this).apply { setBackgroundColor(Color.parseColor("#454956")) }
-            inner.addView(line, LinearLayout.LayoutParams(-1, dp(1)).apply {
-                topMargin = dp(5); bottomMargin = dp(5)
-            })
-        }
-        addDivider()
-        val rotationTitle = TextView(this).apply {
-            text = "Rotasi Layar"
-            textSize = 16f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            setPadding(dp(4), dp(8), 0, dp(8))
-        }
-        inner.addView(rotationTitle)
-        val rotation = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
-        val rotationValues = listOf("Portrait", "Landscape", "Auto")
-        val rotationIds = listOf(View.generateViewId(), View.generateViewId(), View.generateViewId())
-        rotationValues.forEachIndexed { index, label ->
-            val rb = RadioButton(this).apply {
-                id = rotationIds[index]
-                text = label
-                textSize = 12f
-                setTextColor(purple)
-                buttonTintList = android.content.res.ColorStateList.valueOf(purple)
-                layoutParams = RadioGroup.LayoutParams(0, dp(44), 1f)
-            }
-            rotation.addView(rb)
-        }
-        val savedRotation = settingsPrefs.getString("setting_rotation", "Auto")
-        rotation.check(rotationIds[rotationValues.indexOf(savedRotation).takeIf { it >= 0 } ?: 2])
-        inner.addView(rotation)
-        addDivider()
-        val themeTitle = TextView(this).apply {
-            text = "Tema Aplikasi"
-            textSize = 16f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            setPadding(dp(4), dp(8), 0, dp(8))
-        }
-        inner.addView(themeTitle)
-        val theme = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
-        val themeValues = listOf("Light", "Dark", "Auto")
-        val themeIds = themeValues.map { View.generateViewId() }
-        themeValues.forEachIndexed { index, label ->
-            theme.addView(RadioButton(this).apply {
-                id = themeIds[index]
-                text = label
-                textSize = 12f
-                setTextColor(purple)
-                buttonTintList = android.content.res.ColorStateList.valueOf(purple)
-                layoutParams = RadioGroup.LayoutParams(0, dp(44), 1f)
-            })
-        }
-        val savedTheme = settingsPrefs.getString("setting_theme", "Dark")
-        theme.check(themeIds[themeValues.indexOf(savedTheme).takeIf { it >= 0 } ?: 1])
-        inner.addView(theme)
-        panel.addView(inner)
-        val reload = Button(this).apply {
-            text = "Perbarui Playlist"
-            isAllCaps = false
-            setTextColor(Color.WHITE)
-            background = rounded("#3A3D49", "#555968", 18)
-            setOnClickListener {
-                categoryDialog?.dismiss()
-                reloadPlaylists()
-            }
-        }
-        panel.addView(reload, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(10) })
+    private fun showSettingsDialog() = showSettingsPage("VIDEO")
 
-        val actions = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, dp(14), 0, 0)
-        }
-        val cancel = Button(this).apply {
-            text = "Batal"; isAllCaps = false; setTextColor(Color.WHITE)
-            background = rounded("#252832", "#252832", 28)
-        }
-        val apply = Button(this).apply {
-            text = "Apply"; isAllCaps = false; setTextColor(Color.WHITE)
-            background = rounded("#078DCE", "#078DCE", 28)
-        }
-        actions.addView(cancel, LinearLayout.LayoutParams(0, dp(54), 1f).apply { marginEnd = dp(8) })
-        actions.addView(apply, LinearLayout.LayoutParams(0, dp(54), 1f).apply { marginStart = dp(8) })
-        panel.addView(actions)
-
-        val dialog = AlertDialog.Builder(this).setView(panel).create()
-        categoryDialog = dialog
-        cancel.setOnClickListener { dialog.dismiss() }
-        apply.setOnClickListener {
-            val rotationChoice = rotationValues[rotationIds.indexOf(rotation.checkedRadioButtonId).coerceAtLeast(0)]
-            val themeChoice = themeValues[themeIds.indexOf(theme.checkedRadioButtonId).coerceAtLeast(0)]
-            settingsPrefs.edit()
-                .putBoolean("setting_pip", pipSwitch.isChecked)
-                .putBoolean("setting_gesture", gestureSwitch.isChecked)
-                .putString("setting_rotation", rotationChoice)
-                .putString("setting_theme", themeChoice)
-                .apply()
-            applyRotationSetting(rotationChoice)
-            applyThemeSetting(themeChoice)
-            dialog.dismiss()
-        }
-        dialog.setOnShowListener {
-            dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-            dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.88f).toInt(),
-                WindowManager.LayoutParams.WRAP_CONTENT)
-        }
-        dialog.show()
+    private fun showSettingsPage(tab: String) {
+        activeSettingsTab = tab
+        binding.headerBar.visibility = View.GONE
+        binding.serverTabsScroll.visibility = View.GONE
+        binding.welcomePanel.visibility = View.GONE
+        binding.statsBar.visibility = View.GONE
+        binding.rvChannels.visibility = View.GONE
+        binding.settingsPanel.visibility = View.VISIBLE
+        binding.btnSettingsBack.setOnClickListener { closeSettingsPage() }
+        renderSettingsTabs()
+        renderSettingsOptions()
     }
 
-    /** ION TV-style two-row controls over the video. Subtitle selection is intentionally omitted. */
+    private fun closeSettingsPage() {
+        binding.settingsPanel.visibility = View.GONE
+        binding.headerBar.visibility = View.VISIBLE
+        binding.serverTabsScroll.visibility = if ((currentChannel?.sources?.size ?: 0) > 1) View.VISIBLE else View.GONE
+        binding.welcomePanel.visibility = View.VISIBLE
+        binding.statsBar.visibility = View.VISIBLE
+        binding.rvChannels.visibility = View.VISIBLE
+    }
+
+    private fun renderSettingsTabs() {
+        val host = binding.settingsTabs
+        host.removeAllViews()
+        listOf("VIDEO", "SERVER", "AUDIO", "TEKS").forEach { tab ->
+            val selected = tab == activeSettingsTab
+            val item = TextView(this).apply {
+                text = tab
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setTextColor(Color.WHITE)
+                background = rounded(if (selected) "#078DB8" else "#0D1A2A", if (selected) "#078DB8" else "#0D1A2A", 10)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { showSettingsPage(tab) }
+            }
+            host.addView(item, LinearLayout.LayoutParams(0, -1, 1f).apply {
+                setMargins(dp(3), dp(3), dp(3), dp(3))
+            })
+        }
+    }
+
+    private fun renderSettingsOptions() {
+        val host = binding.settingsOptions
+        host.removeAllViews()
+        val tracks = player?.currentTracks
+        fun option(label: String, selected: Boolean = false, action: () -> Unit) {
+            val row = TextView(this).apply {
+                text = if (selected) "$label                         ◉" else "$label                         ○"
+                textSize = 15f
+                typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                setTextColor(if (selected) Color.WHITE else Color.parseColor("#AAB6C7"))
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(22), 0, dp(16), 0)
+                background = rounded(if (selected) "#0752A8" else "#132337", if (selected) "#168BFF" else "#132337", 12)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener(action)
+            }
+            host.addView(row, LinearLayout.LayoutParams(-1, dp(58)).apply { bottomMargin = dp(9) })
+        }
+        when (activeSettingsTab) {
+            "VIDEO" -> {
+                data class VideoChoice(val label: String, val group: androidx.media3.common.TrackGroup?, val index: Int?)
+                val choices = mutableListOf(VideoChoice("Auto", null, null))
+                tracks?.groups?.filter { it.type == C.TRACK_TYPE_VIDEO }?.forEach { group ->
+                    for (i in 0 until group.length) {
+                        if (group.isTrackSupported(i)) {
+                            val f = group.getTrackFormat(i)
+                            if (f.height > 0) choices.add(VideoChoice("${f.height}p", group.mediaTrackGroup, i))
+                        }
+                    }
+                }
+                choices.distinctBy { it.label }.forEachIndexed { idx, item ->
+                    option(item.label, idx == 0) {
+                        val exo = player ?: return@option
+                        val b = exo.trackSelectionParameters.buildUpon().clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                        if (item.group != null && item.index != null) {
+                            b.addOverride(TrackSelectionOverride(item.group, listOf(item.index)))
+                        }
+                        exo.trackSelectionParameters = b.build()
+                    }
+                }
+            }
+            "SERVER" -> {
+                val ch = currentChannel
+                ch?.sources?.forEachIndexed { index, source ->
+                    option("Server ${index + 1}  •  ${source.sourceName}", index == currentSourceIndex) {
+                        currentSourceIndex = index
+                        startStream(ch, index)
+                        renderSettingsOptions()
+                    }
+                }
+                if (ch?.sources.isNullOrEmpty()) option("Tidak ada pilihan server") {}
+            }
+            "AUDIO", "TEKS" -> {
+                val type = if (activeSettingsTab == "AUDIO") C.TRACK_TYPE_AUDIO else C.TRACK_TYPE_TEXT
+                val isText = type == C.TRACK_TYPE_TEXT
+                option(if (isText) "Tidak Ada" else "Otomatis", true) {
+                    val exo = player ?: return@option
+                    val b = exo.trackSelectionParameters.buildUpon().clearOverridesOfType(type)
+                    b.setTrackTypeDisabled(type, isText)
+                    exo.trackSelectionParameters = b.build()
+                }
+                tracks?.groups?.filter { it.type == type }?.forEach { group ->
+                    for (i in 0 until group.length) {
+                        if (!group.isTrackSupported(i)) continue
+                        val f = group.getTrackFormat(i)
+                        val label = f.label ?: f.language ?: "Track ${i + 1}"
+                        val details = if (!isText && f.channelCount > 0) " • ${f.channelCount}ch" else ""
+                        option(label + details) {
+                            val exo = player ?: return@option
+                            val b = exo.trackSelectionParameters.buildUpon().clearOverridesOfType(type)
+                                .setTrackTypeDisabled(type, false)
+                            b.addOverride(TrackSelectionOverride(group.mediaTrackGroup, listOf(i)))
+                            exo.trackSelectionParameters = b.build()
+                        }
+                    }
+                }
+                if (host.childCount == 1) option(if (isText) "Tidak ada subtitle tersedia" else "Tidak ada audio track tambahan") {}
+            }
+        }
+    }
+
+    /** ION TV-style two-row player controls over the video. */
     private fun setupFullscreenOverlayControls() {
         val overlay = FrameLayout(this).apply {
             isClickable = false
@@ -589,7 +559,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         fun overlayButton(symbol: String, description: String, action: () -> Unit,
-                          prominent: Boolean = false): TextView {
+                          prominent: Boolean = false): View {
             val focused = GradientDrawable().apply {
                 setColor(Color.parseColor("#5539BDF0"))
                 setStroke(dp(2), Color.WHITE)
@@ -604,34 +574,59 @@ class MainActivity : AppCompatActivity() {
                 addState(intArrayOf(android.R.attr.state_pressed), focused)
                 addState(intArrayOf(), normal)
             }
-            return TextView(this).apply {
-                text = symbol
-                textSize = if (prominent) 25f else 21f
-                typeface = Typeface.DEFAULT_BOLD
-                gravity = Gravity.CENTER
-                setTextColor(if (prominent) Color.BLACK else Color.WHITE)
-                contentDescription = description
-                isClickable = true
-                isFocusable = true
-                isFocusableInTouchMode = true
-                minWidth = if (prominent) dp(62) else dp(48)
-                minHeight = if (prominent) dp(62) else dp(48)
-                background = states
-                setOnClickListener { action(); showPlayerOverlayTemporarily() }
-                layoutParams = LinearLayout.LayoutParams(
-                    if (prominent) dp(62) else dp(48),
-                    if (prominent) dp(62) else dp(48)
-                ).apply {
-                    marginStart = dp(5)
-                    marginEnd = dp(5)
+            val size = if (prominent) dp(70) else dp(54)
+            val margin = LinearLayout.LayoutParams(size, size).apply {
+                marginStart = dp(5); marginEnd = dp(5)
+            }
+            if (symbol == "1×" || symbol == "HD") {
+                return TextView(this).apply {
+                    text = symbol
+                    textSize = 22f
+                    typeface = Typeface.DEFAULT_BOLD
+                    gravity = Gravity.CENTER
+                    setTextColor(Color.WHITE)
+                    contentDescription = description
+                    isClickable = true; isFocusable = true; isFocusableInTouchMode = true
+                    background = states
+                    setOnClickListener { action(); showPlayerOverlayTemporarily() }
+                    layoutParams = margin
                 }
+            }
+            val iconRes = when (symbol) {
+                "♫" -> R.drawable.ic_music_note
+                "▣" -> R.drawable.ic_aspect_ratio
+                "⚙" -> R.drawable.ic_settings
+                "|◀" -> R.drawable.ic_skip_previous
+                "Ⅱ" -> R.drawable.ic_pause
+                "▶" -> R.drawable.ic_play_arrow
+                "▶|" -> R.drawable.ic_skip_next
+                "🔊" -> R.drawable.ic_volume_up
+                "🔇" -> R.drawable.ic_volume_off
+                "⛶" -> R.drawable.ic_fullscreen
+                else -> R.drawable.ic_play_arrow
+            }
+            val icon = android.widget.ImageView(this).apply {
+                setImageResource(iconRes)
+                imageTintList = android.content.res.ColorStateList.valueOf(if (prominent) Color.BLACK else Color.WHITE)
+                scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                layoutParams = FrameLayout.LayoutParams(if (prominent) dp(38) else dp(28), if (prominent) dp(38) else dp(28), Gravity.CENTER)
+                contentDescription = description
+            }
+            return FrameLayout(this).apply {
+                background = states
+                isClickable = true; isFocusable = true; isFocusableInTouchMode = true
+                contentDescription = description
+                addView(icon)
+                setOnClickListener { action(); showPlayerOverlayTemporarily() }
+                layoutParams = margin
+                tag = icon
             }
         }
 
-        lateinit var playPause: TextView
-        lateinit var mute: TextView
+        lateinit var playPause: android.widget.ImageView
+        lateinit var mute: android.widget.ImageView
 
-        // Upper row: playback options, like the compact controls along the top of ION TV.
+        // Upper row: audio, speed, quality, display ratio, and player settings.
         val topRow = makeRow(Gravity.TOP or Gravity.END)
         topRow.addView(overlayButton("♫", "Pilih audio track", action = {
             showTrackSelectionDialog(C.TRACK_TYPE_AUDIO)
@@ -641,24 +636,26 @@ class MainActivity : AppCompatActivity() {
         topRow.addView(overlayButton("▣", "Ukuran tampilan video", action = { showVideoResizeDialog() }))
         topRow.addView(overlayButton("⚙", "Pengaturan player", action = { showSettingsDialog() }))
 
-        // Lower row: channel navigation and the large central play/pause control.
+        // Lower row: channel navigation, large central play/pause, volume, fullscreen.
         val bottomRow = makeRow(Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
         bottomRow.addView(overlayButton("|◀", "Channel sebelumnya", action = { changeChannel(-1) }))
-        playPause = overlayButton("Ⅱ", "Putar atau jeda", {
+        val playButton = overlayButton("Ⅱ", "Putar atau jeda", {
             val exo = player ?: return@overlayButton
             if (exo.isPlaying || exo.playWhenReady) exo.pause() else exo.play()
-            playPause.text = if (exo.isPlaying || exo.playWhenReady) "Ⅱ" else "▶"
-        }, prominent = true)
+            playPause.setImageResource(if (exo.isPlaying || exo.playWhenReady) R.drawable.ic_pause else R.drawable.ic_play_arrow)
+        }, prominent = true) as FrameLayout
+        playPause = playButton.tag as android.widget.ImageView
         playPauseControl = playPause
-        bottomRow.addView(playPause)
-        bottomRow.addView(overlayButton("▶|", "Channel berikutnya", action = { changeChannel(1) }))
-        mute = overlayButton("🔊", "Bisukan atau aktifkan suara", action = {
+        bottomRow.addView(playButton)
+        val muteButton = overlayButton("🔊", "Bisukan atau aktifkan suara", action = {
             val exo = player ?: return@overlayButton
             val muted = exo.volume > 0f
             exo.volume = if (muted) 0f else 1f
             muteLabelUpdate(mute, muted)
-        })
-        bottomRow.addView(mute)
+        }) as FrameLayout
+        mute = muteButton.tag as android.widget.ImageView
+        bottomRow.addView(overlayButton("▶|", "Channel berikutnya", action = { changeChannel(1) }))
+        bottomRow.addView(muteButton)
         bottomRow.addView(overlayButton("⛶", "Masuk atau keluar layar penuh", action = {
             toggleFullscreen(!isFullscreen)
         }))
@@ -709,8 +706,8 @@ class MainActivity : AppCompatActivity() {
         if (player != null) showPlayerOverlayTemporarily()
     }
 
-    private fun muteLabelUpdate(button: TextView, muted: Boolean) {
-        button.text = if (muted) "🔇" else "🔊"
+    private fun muteLabelUpdate(button: android.widget.ImageView, muted: Boolean) {
+        button.setImageResource(if (muted) R.drawable.ic_volume_off else R.drawable.ic_volume_up)
         button.contentDescription = if (muted) "Aktifkan suara" else "Bisukan suara"
     }
 
@@ -1073,7 +1070,7 @@ class MainActivity : AppCompatActivity() {
 
                 addListener(object : Player.Listener {
                     override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
-                        playPauseControl?.text = if (playWhenReady) "Ⅱ" else "▶"
+                        playPauseControl?.setImageResource(if (playWhenReady) R.drawable.ic_pause else R.drawable.ic_play_arrow)
                     }
 
                     override fun onPlaybackStateChanged(playbackState: Int) {
@@ -1336,6 +1333,10 @@ class MainActivity : AppCompatActivity() {
             val exo = player ?: return super.onKeyDown(keyCode, event)
             if (exo.isPlaying) exo.pause() else exo.play()
             showPlayerOverlayTemporarily()
+            return true
+        }
+        if (keyCode == KeyEvent.KEYCODE_BACK && binding.settingsPanel.visibility == View.VISIBLE) {
+            closeSettingsPage()
             return true
         }
         if (keyCode == KeyEvent.KEYCODE_BACK && isFullscreen) {
