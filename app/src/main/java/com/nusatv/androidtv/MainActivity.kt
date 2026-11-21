@@ -544,12 +544,10 @@ class MainActivity : AppCompatActivity() {
         fun makeRow(gravity: Int): LinearLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             this.gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(5), dp(8), dp(5))
-            setBackground(GradientDrawable().apply {
-                setColor(Color.parseColor("#66070B12"))
-                cornerRadius = dp(24).toFloat()
-            })
-            elevation = dp(5).toFloat()
+            // Floating controls: no dark pill/background, like the reference player.
+            setPadding(0, 0, 0, 0)
+            background = null
+            elevation = 0f
             isFocusable = false
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -561,20 +559,21 @@ class MainActivity : AppCompatActivity() {
         fun overlayButton(symbol: String, description: String, action: () -> Unit,
                           prominent: Boolean = false): View {
             val focused = GradientDrawable().apply {
-                setColor(Color.parseColor("#5539BDF0"))
-                setStroke(dp(2), Color.WHITE)
-                cornerRadius = dp(28).toFloat()
+                setColor(Color.parseColor("#4439BDF0"))
+                setStroke(dp(1), Color.WHITE)
+                cornerRadius = dp(22).toFloat()
             }
             val normal = GradientDrawable().apply {
-                setColor(if (prominent) Color.WHITE else Color.TRANSPARENT)
-                cornerRadius = dp(28).toFloat()
+                setColor(Color.TRANSPARENT)
+                cornerRadius = dp(22).toFloat()
             }
             val states = StateListDrawable().apply {
                 addState(intArrayOf(android.R.attr.state_focused), focused)
                 addState(intArrayOf(android.R.attr.state_pressed), focused)
                 addState(intArrayOf(), normal)
             }
-            val size = if (prominent) dp(70) else dp(54)
+            // Smaller, consistent hit area; play/pause no longer oversized.
+            val size = dp(42)
             val margin = LinearLayout.LayoutParams(size, size).apply {
                 marginStart = dp(5); marginEnd = dp(5)
             }
@@ -607,9 +606,9 @@ class MainActivity : AppCompatActivity() {
             }
             val icon = android.widget.ImageView(this).apply {
                 setImageResource(iconRes)
-                imageTintList = android.content.res.ColorStateList.valueOf(if (prominent) Color.BLACK else Color.WHITE)
+                imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
                 scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
-                layoutParams = FrameLayout.LayoutParams(if (prominent) dp(38) else dp(28), if (prominent) dp(38) else dp(28), Gravity.CENTER)
+                layoutParams = FrameLayout.LayoutParams(dp(26), dp(26), Gravity.CENTER)
                 contentDescription = description
             }
             return FrameLayout(this).apply {
