@@ -50,8 +50,6 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderManager
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode
-import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegSubtitleExtractorsFactory
-import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.withFfmpegSubtitles
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
@@ -358,7 +356,7 @@ class MainActivity : AppCompatActivity() {
             val selected = values[index] == selectedCategory
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
+                this.gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(16), 0, dp(16), 0)
                 background = rounded(if (selected) "#332A49" else "#1D2029",
                     if (selected) "#B99AFB" else "#1D2029", 12)
@@ -377,7 +375,7 @@ class MainActivity : AppCompatActivity() {
                 textSize = 15f
                 typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
                 setTextColor(if (selected) Color.parseColor("#D0B5FF") else Color.WHITE)
-                gravity = Gravity.CENTER_VERTICAL
+                this.gravity = Gravity.CENTER_VERTICAL
             }
             item.addView(name, LinearLayout.LayoutParams(0, -1, 1f))
             if (values[index] == "Events") {
@@ -581,12 +579,12 @@ class MainActivity : AppCompatActivity() {
 
         fun makeRow(gravity: Int): LinearLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            this.gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(8), dp(5), dp(8), dp(5))
-            background = GradientDrawable().apply {
+            setBackground(GradientDrawable().apply {
                 setColor(Color.parseColor("#66070B12"))
                 cornerRadius = dp(24).toFloat()
-            }
+            })
             elevation = dp(5).toFloat()
             isFocusable = false
             layoutParams = FrameLayout.LayoutParams(
@@ -641,17 +639,17 @@ class MainActivity : AppCompatActivity() {
 
         // Upper row: playback options, like the compact controls along the top of ION TV.
         val topRow = makeRow(Gravity.TOP or Gravity.END)
-        topRow.addView(overlayButton("♫", "Pilih audio track") {
+        topRow.addView(overlayButton("♫", "Pilih audio track", action = {
             showTrackSelectionDialog(C.TRACK_TYPE_AUDIO)
-        })
-        topRow.addView(overlayButton("1×", "Kecepatan pemutaran") { showPlaybackSpeedDialog() })
-        topRow.addView(overlayButton("HD", "Kualitas video jika tersedia") { showVideoQualityDialog() })
-        topRow.addView(overlayButton("▣", "Ukuran tampilan video") { showVideoResizeDialog() })
-        topRow.addView(overlayButton("⚙", "Pengaturan player") { showSettingsDialog() })
+        }))
+        topRow.addView(overlayButton("1×", "Kecepatan pemutaran", action = { showPlaybackSpeedDialog() }))
+        topRow.addView(overlayButton("HD", "Kualitas video jika tersedia", action = { showVideoQualityDialog() }))
+        topRow.addView(overlayButton("▣", "Ukuran tampilan video", action = { showVideoResizeDialog() }))
+        topRow.addView(overlayButton("⚙", "Pengaturan player", action = { showSettingsDialog() }))
 
         // Lower row: channel navigation and the large central play/pause control.
         val bottomRow = makeRow(Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
-        bottomRow.addView(overlayButton("|◀", "Channel sebelumnya") { changeChannel(-1) })
+        bottomRow.addView(overlayButton("|◀", "Channel sebelumnya", action = { changeChannel(-1) }))
         playPause = overlayButton("Ⅱ", "Putar atau jeda", {
             val exo = player ?: return@overlayButton
             if (exo.isPlaying || exo.playWhenReady) exo.pause() else exo.play()
@@ -659,17 +657,17 @@ class MainActivity : AppCompatActivity() {
         }, prominent = true)
         playPauseControl = playPause
         bottomRow.addView(playPause)
-        bottomRow.addView(overlayButton("▶|", "Channel berikutnya") { changeChannel(1) })
-        mute = overlayButton("🔊", "Bisukan atau aktifkan suara") {
+        bottomRow.addView(overlayButton("▶|", "Channel berikutnya", action = { changeChannel(1) }))
+        mute = overlayButton("🔊", "Bisukan atau aktifkan suara", action = {
             val exo = player ?: return@overlayButton
             val muted = exo.volume > 0f
             exo.volume = if (muted) 0f else 1f
             muteLabelUpdate(mute, muted)
-        }
-        bottomRow.addView(mute)
-        bottomRow.addView(overlayButton("⛶", "Masuk atau keluar layar penuh") {
-            toggleFullscreen(!isFullscreen)
         })
+        bottomRow.addView(mute)
+        bottomRow.addView(overlayButton("⛶", "Masuk atau keluar layar penuh", action = {
+            toggleFullscreen(!isFullscreen)
+        }))
 
         overlay.addView(topRow, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -995,9 +993,8 @@ class MainActivity : AppCompatActivity() {
 
         // The factory is shared by HLS manifest, variant playlist, key (when permitted),
         // and media-segment requests. OkHttp follows HTTP and HTTPS redirects.
-        val mediaSourceFactory = DefaultMediaSourceFactory(this, FfmpegSubtitleExtractorsFactory())
+        val mediaSourceFactory = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(dataSourceFactory)
-            .withFfmpegSubtitles(dataSourceFactory)
 
         val mediaItemBuilder = MediaItem.Builder().setUri(candidate.url)
         when (candidate.mimeType) {
