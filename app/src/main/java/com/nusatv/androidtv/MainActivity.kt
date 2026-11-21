@@ -79,7 +79,6 @@ class MainActivity : AppCompatActivity() {
     private var isTryingFallback = false
     private var playbackGeneration = 0
     private var isRefreshingEpg = false
-    private var fullscreenBackButton: TextView? = null
     private var fullscreenQualityButton: TextView? = null
     private var fullscreenOverlay: View? = null
     private val settingsPrefs by lazy { getSharedPreferences("nusa_settings", MODE_PRIVATE) }
@@ -553,30 +552,17 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    /** Player overlay controls inspired by the ION TV layout. These sit over the video,
-     * so opening settings/quality never navigates away from or stops playback. */
+    /** Compact player actions are grouped at the bottom edge, away from the video header. */
     private fun setupFullscreenOverlayControls() {
         val overlay = FrameLayout(this).apply {
             isClickable = false
             isFocusable = false
         }
-        val back = TextView(this).apply {
-            text = "‹"
-            textSize = 38f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            background = rounded("#99000000", "#55FFFFFF", 28)
-            contentDescription = "Keluar dari layar penuh"
-            isClickable = true
-            isFocusable = true
-            visibility = View.GONE
-            setOnClickListener { toggleFullscreen(false) }
-        }
-        val topControls = LinearLayout(this).apply {
+        val bottomControls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(6), dp(4), dp(6), dp(4))
-            background = rounded("#99000000", "#33FFFFFF", 22)
+            background = rounded("#CC090A11", "#33FFFFFF", 22)
         }
         fun overlayButton(symbol: String, description: String, action: () -> Unit): TextView {
             return TextView(this).apply {
@@ -589,7 +575,7 @@ class MainActivity : AppCompatActivity() {
                 isFocusable = true
                 background = rounded("#22000000", "#00000000", 18)
                 setOnClickListener { action() }
-                layoutParams = LinearLayout.LayoutParams(dp(44), dp(42))
+                layoutParams = LinearLayout.LayoutParams(dp(48), dp(46))
             }
         }
         lateinit var mute: TextView
@@ -608,22 +594,21 @@ class MainActivity : AppCompatActivity() {
         val fullscreen = overlayButton("⛶", "Masuk atau keluar layar penuh") {
             toggleFullscreen(!isFullscreen)
         }
-        topControls.addView(mute)
-        topControls.addView(settings)
-        topControls.addView(quality)
-        topControls.addView(fullscreen)
+        bottomControls.addView(mute)
+        bottomControls.addView(settings)
+        bottomControls.addView(quality)
+        bottomControls.addView(fullscreen)
 
-        val backParams = FrameLayout.LayoutParams(dp(46), dp(46), Gravity.TOP or Gravity.START).apply {
-            setMargins(dp(10), dp(10), 0, 0)
+        val bottomParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            dp(54),
+            Gravity.BOTTOM or Gravity.END
+        ).apply {
+            setMargins(0, 0, dp(12), dp(12))
         }
-        val topParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, dp(50), Gravity.TOP or Gravity.END).apply {
-            setMargins(0, dp(10), dp(10), 0)
-        }
-        overlay.addView(back, backParams)
-        overlay.addView(topControls, topParams)
+        overlay.addView(bottomControls, bottomParams)
         overlay.visibility = View.VISIBLE
         binding.playerContainer.addView(overlay, FrameLayout.LayoutParams(-1, -1))
-        fullscreenBackButton = back
         fullscreenQualityButton = quality
         fullscreenOverlay = overlay
         showPlayerOverlayTemporarily()
@@ -1053,7 +1038,6 @@ class MainActivity : AppCompatActivity() {
         isFullscreen = enable
         if (enable) {
             fullscreenOverlay?.visibility = View.VISIBLE
-            fullscreenBackButton?.visibility = View.VISIBLE
             showPlayerOverlayTemporarily()
             binding.headerBar.visibility = View.GONE
             binding.welcomePanel.visibility = View.GONE
@@ -1079,7 +1063,6 @@ class MainActivity : AppCompatActivity() {
             )
         } else {
             fullscreenOverlay?.visibility = View.VISIBLE
-            fullscreenBackButton?.visibility = View.GONE
             showPlayerOverlayTemporarily()
             binding.headerBar.visibility = View.VISIBLE
             binding.welcomePanel.visibility = View.GONE

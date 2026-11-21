@@ -1,7 +1,6 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("androidx.baselineprofile")
 }
 
 android {
@@ -12,8 +11,8 @@ android {
         applicationId = "com.nusatv.androidtv"
         minSdk = 24
         targetSdk = 34
-        versionCode = 22
-        versionName = "2.5.8"
+        versionCode = 23
+        versionName = "2.5.9"
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
@@ -64,5 +63,4 @@ dependencies {
 
     // Installs generated Baseline Profiles on supported Android versions.
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
-    baselineProfile(project(":baselineprofile"))
 }
