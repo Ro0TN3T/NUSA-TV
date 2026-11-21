@@ -50,8 +50,6 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderManager
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode
-import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegSubtitleExtractorsFactory
-import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.withFfmpegSubtitles
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
@@ -980,11 +978,14 @@ class MainActivity : AppCompatActivity() {
         val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
             .setDefaultRequestProperties(headersMap)
 
-        // The factory is shared by HLS manifest, variant playlist, key (when permitted),
-        // and media-segment requests. OkHttp follows HTTP and HTTPS redirects.
-        val mediaSourceFactory = DefaultMediaSourceFactory(this, FfmpegSubtitleExtractorsFactory())
+        // The same authenticated OkHttp data source is used for manifests, segments,
+        // and subtitle requests. NextLib 1.11.0-0.15.0 provides FFmpeg audio/video
+        // renderers, but does not publish FfmpegSubtitleExtractorsFactory or
+        // withFfmpegSubtitles. Keep Media3's built-in subtitle extractors here;
+        // standard WebVTT, TTML, SubRip, and supported in-container text tracks
+        // continue to work without referencing unavailable NextLib APIs.
+        val mediaSourceFactory = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(dataSourceFactory)
-            .withFfmpegSubtitles(dataSourceFactory)
 
         val mediaItemBuilder = MediaItem.Builder().setUri(candidate.url)
         when (candidate.mimeType) {
