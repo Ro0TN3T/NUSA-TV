@@ -43,6 +43,13 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderManager
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegSubtitleExtractorsFactory
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.withFfmpegSubtitles
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
@@ -65,6 +72,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var adapter: ChannelAdapter
 
     private var player: ExoPlayer? = null
+    private var decoderManager: DecoderManager? = null
     private var allChannels: List<TvChannel> = emptyList()
     private var currentChannel: TvChannel? = null
     private var currentSourceIndex = 0
@@ -79,7 +87,6 @@ class MainActivity : AppCompatActivity() {
     private var isTryingFallback = false
     private var playbackGeneration = 0
     private var isRefreshingEpg = false
-    private var fullscreenQualityButton: TextView? = null
     private var fullscreenOverlay: View? = null
     private val settingsPrefs by lazy { getSharedPreferences("nusa_settings", MODE_PRIVATE) }
     private var touchStartX = 0f
@@ -552,30 +559,39 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    /** Compact player actions are grouped at the bottom edge, away from the video header. */
+    /** Player overlay controls inspired by the ION TV layout. These sit over the video,
+     * so opening settings/quality never navigates away from or stops playback. */
     private fun setupFullscreenOverlayControls() {
+        // Semua kontrol pemutar ditempatkan di bawah video agar tidak menutupi
+        // status bar/channel watermark seperti pada layout sebelumnya.
         val overlay = FrameLayout(this).apply {
             isClickable = false
             isFocusable = false
         }
         val bottomControls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(6), dp(4), dp(6), dp(4))
-            background = rounded("#CC090A11", "#33FFFFFF", 22)
+            gravity = Gravity.CENTER
+            setPadding(dp(6), dp(5), dp(6), dp(5))
+            background = rounded("#CC10131D", "#445B6478", 24)
+            elevation = dp(8).toFloat()
         }
         fun overlayButton(symbol: String, description: String, action: () -> Unit): TextView {
             return TextView(this).apply {
                 text = symbol
-                textSize = 22f
+                textSize = 20f
                 gravity = Gravity.CENTER
                 setTextColor(Color.WHITE)
                 contentDescription = description
                 isClickable = true
                 isFocusable = true
-                background = rounded("#22000000", "#00000000", 18)
-                setOnClickListener { action() }
-                layoutParams = LinearLayout.LayoutParams(dp(48), dp(46))
+                minWidth = dp(42)
+                minHeight = dp(42)
+                background = rounded("#222A3548", "#335B6478", 16)
+                setOnClickListener { action(); showPlayerOverlayTemporarily() }
+                layoutParams = LinearLayout.LayoutParams(dp(42), dp(42)).apply {
+                    marginStart = dp(1)
+                    marginEnd = dp(1)
+                }
             }
         }
         lateinit var mute: TextView
@@ -591,25 +607,40 @@ class MainActivity : AppCompatActivity() {
         val quality = overlayButton("▣", "Pilih resolusi video") {
             showVideoQualityDialog()
         }
+        val audio = overlayButton("♫", "Pilih audio") {
+            showTrackSelectionDialog(C.TRACK_TYPE_AUDIO)
+        }
+        val subtitles = overlayButton("CC", "Pilih subtitle") {
+            showTrackSelectionDialog(C.TRACK_TYPE_TEXT)
+        }
+        val speed = overlayButton("1×", "Kecepatan pemutaran") {
+            showPlaybackSpeedDialog()
+        }
+        val decoder = overlayButton("FF", "Pilih decoder video dan audio") {
+            showDecoderDialog()
+        }
         val fullscreen = overlayButton("⛶", "Masuk atau keluar layar penuh") {
             toggleFullscreen(!isFullscreen)
         }
         bottomControls.addView(mute)
+        bottomControls.addView(audio)
+        bottomControls.addView(subtitles)
+        bottomControls.addView(speed)
+        bottomControls.addView(decoder)
         bottomControls.addView(settings)
         bottomControls.addView(quality)
         bottomControls.addView(fullscreen)
 
         val bottomParams = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
-            dp(54),
-            Gravity.BOTTOM or Gravity.END
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
         ).apply {
-            setMargins(0, 0, dp(12), dp(12))
+            setMargins(dp(12), 0, dp(12), dp(16))
         }
         overlay.addView(bottomControls, bottomParams)
         overlay.visibility = View.VISIBLE
         binding.playerContainer.addView(overlay, FrameLayout.LayoutParams(-1, -1))
-        fullscreenQualityButton = quality
         fullscreenOverlay = overlay
         showPlayerOverlayTemporarily()
     }
@@ -656,6 +687,83 @@ class MainActivity : AppCompatActivity() {
                     builder.addOverride(TrackSelectionOverride(selected.group, listOf(selected.index)))
                 }
                 exo.trackSelectionParameters = builder.build()
+            }
+            .setNegativeButton("Tutup", null)
+            .show()
+    }
+
+    @OptIn(UnstableApi::class)
+    private fun showTrackSelectionDialog(trackType: Int) {
+        val exo = player ?: return
+        val isText = trackType == C.TRACK_TYPE_TEXT
+        val title = if (isText) "Subtitle" else "Audio"
+        data class TrackOption(val label: String, val group: androidx.media3.common.TrackGroup?, val index: Int)
+        val options = mutableListOf<TrackOption>()
+        options.add(TrackOption(if (isText) "Nonaktif" else "Otomatis", null, -1))
+        exo.currentTracks.groups.forEach { group ->
+            if (group.type == trackType) {
+                for (index in 0 until group.length) {
+                    if (!group.isTrackSupported(index)) continue
+                    val format = group.getTrackFormat(index)
+                    val label = buildString {
+                        append(format.label?.takeIf { it.isNotBlank() }
+                            ?: format.language?.takeIf { it.isNotBlank() }
+                            ?: "Track ${index + 1}")
+                        if (!isText && format.channelCount > 0) append(" • ${format.channelCount}ch")
+                        if (format.language != null && format.label != null) append(" (${format.language})")
+                    }
+                    options.add(TrackOption(label, group.mediaTrackGroup, index))
+                }
+            }
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Pilih $title")
+            .setItems(options.map { it.label }.toTypedArray()) { _, which ->
+                val selected = options[which]
+                val builder = exo.trackSelectionParameters.buildUpon()
+                builder.clearOverridesOfType(trackType)
+                if (isText) builder.setTrackTypeDisabled(trackType, selected.group == null)
+                else builder.setTrackTypeDisabled(trackType, false)
+                if (selected.group != null) {
+                    builder.addOverride(TrackSelectionOverride(selected.group, listOf(selected.index)))
+                }
+                exo.trackSelectionParameters = builder.build()
+            }
+            .setNegativeButton("Tutup", null)
+            .show()
+    }
+
+    private fun showPlaybackSpeedDialog() {
+        val exo = player ?: return
+        val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
+        val labels = speeds.map { if (it == 1.0f) "Normal (1×)" else "${it}×" }
+        AlertDialog.Builder(this)
+            .setTitle("Kecepatan pemutaran")
+            .setItems(labels.toTypedArray()) { _, which ->
+                exo.setPlaybackSpeed(speeds[which])
+            }
+            .setNegativeButton("Tutup", null)
+            .show()
+    }
+
+    private fun showDecoderDialog() {
+        val manager = decoderManager ?: return
+        val options = listOf(
+            "Video • Otomatis (disarankan)", "Video • Hardware", "Video • Software", "Video • FFmpeg",
+            "Audio • Otomatis (disarankan)", "Audio • Hardware", "Audio • Software", "Audio • FFmpeg"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("Mode Decoder")
+            .setItems(options.toTypedArray()) { _, which ->
+                val mode = when (which % 4) {
+                    0 -> DecoderMode.AUTO
+                    1 -> DecoderMode.HARDWARE
+                    2 -> DecoderMode.SOFTWARE
+                    else -> DecoderMode.FFMPEG
+                }
+                if (which < 4) manager.selectVideoDecoder(mode)
+                else manager.selectAudioDecoder(mode)
+                binding.tvStatus.text = "Decoder ${if (which < 4) "video" else "audio"}: ${mode.name}"
             }
             .setNegativeButton("Tutup", null)
             .show()
@@ -821,8 +929,9 @@ class MainActivity : AppCompatActivity() {
 
         // The factory is shared by HLS manifest, variant playlist, key (when permitted),
         // and media-segment requests. OkHttp follows HTTP and HTTPS redirects.
-        val mediaSourceFactory = DefaultMediaSourceFactory(this)
+        val mediaSourceFactory = DefaultMediaSourceFactory(this, FfmpegSubtitleExtractorsFactory())
             .setDataSourceFactory(dataSourceFactory)
+            .withFfmpegSubtitles(dataSourceFactory)
 
         val mediaItemBuilder = MediaItem.Builder().setUri(candidate.url)
         when (candidate.mimeType) {
@@ -843,9 +952,23 @@ class MainActivity : AppCompatActivity() {
         val mediaItem = mediaItemBuilder.build()
         var lastLoadFailure: String? = null
 
+        // Add FFmpeg extension renderers after Android platform renderers. This keeps
+        // hardware decoding preferred, while FFmpeg is available as a fallback for
+        // formats that the device's MediaCodec cannot decode.
+        val decoderManagerForPlayer = DecoderManager()
+        val ffmpegRenderers = NextRenderersFactory(this)
+            .setDecoderManager(decoderManagerForPlayer)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+        val trackSelector = DefaultTrackSelector(this)
+
         val exoPlayer = ExoPlayer.Builder(this)
+            .setTrackSelector(trackSelector)
+            .setRenderersFactory(ffmpegRenderers)
             .setMediaSourceFactory(mediaSourceFactory)
             .build().apply {
+                // DecoderManager must attach before prepare and requires DefaultTrackSelector.
+                decoderManagerForPlayer.attach(this)
+                decoderManager = decoderManagerForPlayer
                 setMediaItem(mediaItem)
                 playWhenReady = true
                 volume = 1f
@@ -1142,6 +1265,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun releasePlayer() {
         mainHandler.removeCallbacks(bufferingTimeout)
+        decoderManager?.detach()
+        decoderManager = null
         player?.release()
         player = null
         binding.playerView.player = null
