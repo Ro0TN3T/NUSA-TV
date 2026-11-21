@@ -8,8 +8,6 @@ import android.os.Handler
 import android.os.Looper
 import android.content.pm.PackageManager
 import android.content.pm.ActivityInfo
-import android.text.Editable
-import android.text.TextWatcher
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.media.AudioManager
@@ -154,17 +152,15 @@ class MainActivity : AppCompatActivity() {
         binding.btnFilterIndo.text = if (selectedCategory == "Events") "Events Live ▼" else "$selectedCategory ▼"
         binding.btnFilterIndo.setTextColor(Color.WHITE)
 
-        // Keep the channel list directly under the server tabs on phone and TV.
-        // Playback status and channel-count banners are intentionally hidden.
+        // Catalogue layout: compact app bar, embedded player, source selector,
+        // and persistent channel catalogue.
         binding.welcomePanel.visibility = View.GONE
-        binding.statsBar.visibility = View.GONE
+        binding.statsBar.visibility = View.VISIBLE
         binding.btnFilterIndo.setOnClickListener { showCategoryDialog() }
-        binding.btnFullscreen.visibility = View.GONE
+        binding.btnFullscreen.visibility = View.VISIBLE
         binding.btnStop.visibility = View.GONE
-        binding.btnReload.visibility = View.GONE
-        binding.etSearch.visibility = View.GONE
+        binding.btnReload.visibility = View.VISIBLE
         binding.btnFullscreen.setOnClickListener { requestLandscapeFullscreen() }
-
         binding.playerContainer.setOnClickListener {
             // A tap reveals the overlay; fullscreen is a separate explicit control.
             showPlayerOverlayTemporarily()
@@ -259,14 +255,12 @@ class MainActivity : AppCompatActivity() {
         filterJob?.cancel()
         filterJob = lifecycleScope.launch {
             val filteredChannels = withContext(Dispatchers.Default) {
-                if (category == "Semua") source
-                else {
-                    val workerContext = currentCoroutineContext()
-                    buildList {
-                        source.forEachIndexed { index, channel ->
-                            if ((index and 127) == 0) workerContext.ensureActive()
-                            if (channelMatchesCategory(channel, category)) add(channel)
-                        }
+                val workerContext = currentCoroutineContext()
+                buildList {
+                    source.forEachIndexed { index, channel ->
+                        if ((index and 127) == 0) workerContext.ensureActive()
+                        val matchesCategory = category == "Semua" || channelMatchesCategory(channel, category)
+                        if (matchesCategory) add(channel)
                     }
                 }
             }
@@ -309,7 +303,7 @@ class MainActivity : AppCompatActivity() {
                 gravity = Gravity.CENTER
                 setTextColor(Color.WHITE)
                 setPadding(dp(13), dp(8), dp(13), dp(8))
-                background = if (index == currentSourceIndex) rounded("#1762D7", "#16D7EA", 24)
+                background = if (index == currentSourceIndex) rounded("#49347F", "#B99AFB", 22)
                     else rounded("#171A28", "#30364D", 24)
                 isClickable = true
                 isFocusable = true
@@ -1233,7 +1227,6 @@ class MainActivity : AppCompatActivity() {
             binding.statsBar.visibility = View.GONE
             binding.rvChannels.visibility = View.GONE
             binding.serverTabsScroll?.visibility = View.GONE
-            binding.etSearch.visibility = View.GONE
             if (isAndroidTv) {
                 binding.heroSection?.apply {
                     setPadding(0, 0, 0, 0)
@@ -1269,11 +1262,10 @@ class MainActivity : AppCompatActivity() {
             showPlayerOverlayTemporarily()
             binding.headerBar.visibility = View.VISIBLE
             binding.welcomePanel.visibility = View.GONE
-            binding.statsBar.visibility = View.GONE
+            binding.statsBar.visibility = View.VISIBLE
             binding.rvChannels.visibility = View.VISIBLE
             binding.serverTabsScroll?.visibility = View.VISIBLE
-            binding.etSearch.visibility = View.GONE
-            val density = resources.displayMetrics.density
+                val density = resources.displayMetrics.density
             if (isAndroidTv) {
                 binding.heroSection?.apply {
                     setPadding(dp(24), dp(12), dp(24), 0)

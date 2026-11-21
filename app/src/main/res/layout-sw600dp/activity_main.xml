@@ -61,25 +61,6 @@
                 android:textSize="11sp" />
         </LinearLayout>
 
-        <EditText
-            android:id="@+id/etSearch"
-            android:layout_width="0dp"
-            android:layout_height="40dp"
-            android:visibility="visible"
-            android:layout_weight="1"
-            android:layout_marginEnd="10dp"
-            android:background="@drawable/bg_tile_selector"
-            android:hint="Cari channel TV..."
-            android:imeOptions="actionSearch"
-            android:inputType="text"
-            android:maxLines="1"
-            android:paddingHorizontal="12dp"
-            android:textColor="@color/txt_white"
-            android:textColorHint="@color/muted"
-            android:textSize="13sp"
-            android:focusable="true"
-            android:focusableInTouchMode="true" />
-
         <Button
             android:id="@+id/btnFilterIndo"
             android:layout_width="wrap_content"
@@ -242,6 +223,22 @@
                 android:textSize="11sp" />
         </LinearLayout>
     </LinearLayout>
+
+    <HorizontalScrollView
+        android:id="@+id/serverTabsScroll"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="@color/panel"
+        android:fillViewport="false"
+        android:scrollbars="none"
+        android:paddingHorizontal="20dp">
+        <LinearLayout
+            android:id="@+id/serverTabs"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal" />
+    </HorizontalScrollView>
 
     <LinearLayout
         android:id="@+id/statsBar"
