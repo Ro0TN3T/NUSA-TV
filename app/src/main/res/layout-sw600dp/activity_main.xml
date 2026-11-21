@@ -150,7 +150,7 @@
                 android:layout_height="match_parent"
                 app:resize_mode="fit"
                 app:show_buffering="when_playing"
-                app:use_controller="true" />
+                app:use_controller="false" />
         </FrameLayout>
 
         <LinearLayout

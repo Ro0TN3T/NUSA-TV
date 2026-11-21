@@ -1,9 +1,8 @@
--keep class androidx.media3.** { *; }
--dontwarn androidx.media3.**
-
-# NextLib creates FFmpeg renderers/decoders through extension discovery and JNI.
+# NextLib discovers FFmpeg renderer/decoder implementations through extension classes.
 -keep class io.github.anilbeesetti.nextlib.** { *; }
--keep class androidx.media3.decoder.ffmpeg.** { *; }
 -keepclasseswithmembernames class * {
     native <methods>;
 }
+
+# Keep metadata for reflective decoder discovery without disabling all Media3 shrinking.
+-keepattributes *Annotation*,InnerClasses,EnclosingMethod,Signature

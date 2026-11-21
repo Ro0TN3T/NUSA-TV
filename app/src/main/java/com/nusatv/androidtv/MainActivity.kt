@@ -25,6 +25,8 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.widget.LinearLayout
+import android.widget.HorizontalScrollView
+import android.graphics.drawable.StateListDrawable
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
@@ -88,11 +90,18 @@ class MainActivity : AppCompatActivity() {
     private var playbackGeneration = 0
     private var isRefreshingEpg = false
     private var fullscreenOverlay: View? = null
+    private var playPauseControl: TextView? = null
     private val settingsPrefs by lazy { getSharedPreferences("nusa_settings", MODE_PRIVATE) }
     private var touchStartX = 0f
     private var touchStartY = 0f
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val playerOverlayHideRunnable = Runnable { fullscreenOverlay?.visibility = View.GONE }
+    private val playerOverlayHideRunnable = object : Runnable {
+        override fun run() {
+            val overlay = fullscreenOverlay ?: return
+            if (overlay.hasFocus()) binding.playerContainer.requestFocus()
+            overlay.visibility = View.GONE
+        }
+    }
     private val bufferingTimeout = Runnable {
         if (player?.playbackState == Player.STATE_BUFFERING) {
             tryNextSource("Buffering timeout setelah 15 detik")
@@ -153,6 +162,8 @@ class MainActivity : AppCompatActivity() {
         binding.statsBar.visibility = View.GONE
         binding.btnFilterIndo.setOnClickListener { showCategoryDialog() }
         binding.btnFullscreen.visibility = View.GONE
+        binding.btnStop.visibility = View.GONE
+        binding.btnReload.visibility = View.GONE
         binding.etSearch.visibility = View.GONE
         binding.btnFullscreen.setOnClickListener { requestLandscapeFullscreen() }
 
@@ -562,93 +573,135 @@ class MainActivity : AppCompatActivity() {
     /** Player overlay controls inspired by the ION TV layout. These sit over the video,
      * so opening settings/quality never navigates away from or stops playback. */
     private fun setupFullscreenOverlayControls() {
-        // Semua kontrol pemutar ditempatkan di bawah video agar tidak menutupi
-        // status bar/channel watermark seperti pada layout sebelumnya.
+        // Satu-satunya set kontrol: overlay custom dipakai pada embedded dan fullscreen.
+        // Native Media3 controller dinonaktifkan di kedua layout XML.
         val overlay = FrameLayout(this).apply {
             isClickable = false
             isFocusable = false
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
         val bottomControls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
+            gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(6), dp(5), dp(6), dp(5))
-            background = rounded("#CC10131D", "#445B6478", 24)
+            background = rounded("#D910131D", "#665B6478", 18)
             elevation = dp(8).toFloat()
+            isFocusable = false
         }
         fun overlayButton(symbol: String, description: String, action: () -> Unit): TextView {
+            val focused = GradientDrawable().apply {
+                setColor(Color.parseColor("#334A75B8"))
+                setStroke(dp(2), Color.parseColor("#FF55C8F2"))
+                cornerRadius = dp(11).toFloat()
+            }
+            val normal = GradientDrawable().apply {
+                setColor(Color.parseColor("#292F3D"))
+                setStroke(dp(1), Color.parseColor("#665B6478"))
+                cornerRadius = dp(11).toFloat()
+            }
+            val states = StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_focused), focused)
+                addState(intArrayOf(android.R.attr.state_pressed), focused)
+                addState(intArrayOf(), normal)
+            }
             return TextView(this).apply {
                 text = symbol
-                textSize = 20f
+                textSize = if (symbol.length > 2) 12f else 17f
+                typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
                 setTextColor(Color.WHITE)
                 contentDescription = description
                 isClickable = true
                 isFocusable = true
-                minWidth = dp(42)
-                minHeight = dp(42)
-                background = rounded("#222A3548", "#335B6478", 16)
+                isFocusableInTouchMode = true
+                minWidth = dp(40)
+                minHeight = dp(40)
+                background = states
                 setOnClickListener { action(); showPlayerOverlayTemporarily() }
-                layoutParams = LinearLayout.LayoutParams(dp(42), dp(42)).apply {
-                    marginStart = dp(1)
-                    marginEnd = dp(1)
+                layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply {
+                    marginStart = dp(2)
+                    marginEnd = dp(2)
                 }
             }
         }
+        lateinit var playPause: TextView
         lateinit var mute: TextView
+        val previous = overlayButton("|◀", "Channel sebelumnya (CH-) ") { changeChannel(-1) }
+        playPause = overlayButton("Ⅱ", "Putar atau jeda") {
+            val exo = player ?: return@overlayButton
+            if (exo.playWhenReady) exo.pause() else exo.play()
+            playPause.text = if (exo.playWhenReady) "Ⅱ" else "▶"
+        }
+        playPauseControl = playPause
+        val next = overlayButton("▶|", "Channel berikutnya (CH+)") { changeChannel(1) }
         mute = overlayButton("🔊", "Bisukan atau aktifkan suara") {
             val exo = player ?: return@overlayButton
             val muted = exo.volume > 0f
             exo.volume = if (muted) 0f else 1f
             muteLabelUpdate(mute, muted)
         }
-        val settings = overlayButton("⚙", "Pengaturan pemutar") {
-            showSettingsDialog()
-        }
-        val quality = overlayButton("▣", "Pilih resolusi video") {
-            showVideoQualityDialog()
-        }
-        val audio = overlayButton("♫", "Pilih audio") {
-            showTrackSelectionDialog(C.TRACK_TYPE_AUDIO)
-        }
-        val subtitles = overlayButton("CC", "Pilih subtitle") {
-            showTrackSelectionDialog(C.TRACK_TYPE_TEXT)
-        }
-        val speed = overlayButton("1×", "Kecepatan pemutaran") {
-            showPlaybackSpeedDialog()
-        }
-        val decoder = overlayButton("FF", "Pilih decoder video dan audio") {
-            showDecoderDialog()
-        }
-        val fullscreen = overlayButton("⛶", "Masuk atau keluar layar penuh") {
-            toggleFullscreen(!isFullscreen)
-        }
-        bottomControls.addView(mute)
-        bottomControls.addView(audio)
-        bottomControls.addView(subtitles)
-        bottomControls.addView(speed)
-        bottomControls.addView(decoder)
-        bottomControls.addView(settings)
-        bottomControls.addView(quality)
-        bottomControls.addView(fullscreen)
+        val audio = overlayButton("♫", "Pilih audio track") { showTrackSelectionDialog(C.TRACK_TYPE_AUDIO) }
+        val subtitles = overlayButton("CC", "Pilih subtitle") { showTrackSelectionDialog(C.TRACK_TYPE_TEXT) }
+        val speed = overlayButton("1×", "Kecepatan pemutaran") { showPlaybackSpeedDialog() }
+        val quality = overlayButton("HD", "Kualitas video jika tersedia") { showVideoQualityDialog() }
+        val resize = overlayButton("▣", "Ukuran tampilan video") { showVideoResizeDialog() }
+        val decoder = overlayButton("FF", "Pengaturan decoder") { showDecoderDialog() }
+        val settings = overlayButton("⚙", "Pengaturan player") { showSettingsDialog() }
+        val fullscreen = overlayButton("⛶", "Masuk atau keluar layar penuh") { toggleFullscreen(!isFullscreen) }
 
-        val bottomParams = FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-        ).apply {
-            setMargins(dp(12), 0, dp(12), dp(16))
+        listOf(previous, playPause, next, mute, audio, subtitles, speed, quality, resize, decoder, settings, fullscreen)
+            .forEach(bottomControls::addView)
+
+        val horizontal = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            isFillViewport = false
+            clipToPadding = false
+            addView(bottomControls, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            ))
         }
-        overlay.addView(bottomControls, bottomParams)
+        val bottomParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM
+        ).apply {
+            setMargins(dp(8), 0, dp(8), dp(8))
+        }
+        overlay.addView(horizontal, bottomParams)
         overlay.visibility = View.VISIBLE
         binding.playerContainer.addView(overlay, FrameLayout.LayoutParams(-1, -1))
         fullscreenOverlay = overlay
         showPlayerOverlayTemporarily()
     }
 
+    private fun showVideoResizeDialog() {
+        val modes = arrayOf("Fit • tampilkan seluruh gambar", "Fill • isi layar", "Zoom • perbesar")
+        val values = intArrayOf(
+            androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT,
+            androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL,
+            androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+        )
+        val selected = values.indexOf(binding.playerView.resizeMode).coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle("Ukuran video")
+            .setSingleChoiceItems(modes, selected) { dialog, which ->
+                binding.playerView.resizeMode = values[which]
+                dialog.dismiss()
+            }
+            .setNegativeButton("Tutup", null)
+            .show()
+    }
+
     private fun showPlayerOverlayTemporarily() {
         fullscreenOverlay?.visibility = View.VISIBLE
         mainHandler.removeCallbacks(playerOverlayHideRunnable)
         mainHandler.postDelayed(playerOverlayHideRunnable, 4000L)
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        if (player != null) showPlayerOverlayTemporarily()
     }
 
     private fun muteLabelUpdate(button: TextView, muted: Boolean) {
@@ -1015,6 +1068,10 @@ class MainActivity : AppCompatActivity() {
                 })
 
                 addListener(object : Player.Listener {
+                    override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                        playPauseControl?.text = if (playWhenReady) "Ⅱ" else "▶"
+                    }
+
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         if (activeGeneration != playbackGeneration || currentChannel?.key != channel.key) return
                         when (playbackState) {
@@ -1157,7 +1214,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setFullscreenUi(enable: Boolean) {
-        if (isAndroidTv && !enable) return
         isFullscreen = enable
         if (enable) {
             fullscreenOverlay?.visibility = View.VISIBLE
@@ -1168,9 +1224,23 @@ class MainActivity : AppCompatActivity() {
             binding.rvChannels.visibility = View.GONE
             binding.serverTabsScroll?.visibility = View.GONE
             binding.etSearch.visibility = View.GONE
-            binding.playerContainer.layoutParams = binding.playerContainer.layoutParams.apply {
-                width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
-                height = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            if (isAndroidTv) {
+                binding.heroSection?.apply {
+                    setPadding(0, 0, 0, 0)
+                    layoutParams = layoutParams.apply {
+                        width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                        height = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                    }
+                }
+                binding.playerContainer.layoutParams = LinearLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            } else {
+                binding.playerContainer.layoutParams = binding.playerContainer.layoutParams.apply {
+                    width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                    height = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                }
             }
             // Keep the complete broadcast frame visible in fullscreen. ZOOM crops
             // the edges and makes embedded channel watermarks appear oversized.
@@ -1194,9 +1264,20 @@ class MainActivity : AppCompatActivity() {
             binding.serverTabsScroll?.visibility = View.VISIBLE
             binding.etSearch.visibility = View.GONE
             val density = resources.displayMetrics.density
-            binding.playerContainer.layoutParams = binding.playerContainer.layoutParams.apply {
-                width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
-                height = (210 * density).toInt()
+            if (isAndroidTv) {
+                binding.heroSection?.apply {
+                    setPadding(dp(24), dp(12), dp(24), 0)
+                    layoutParams = layoutParams.apply {
+                        width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                        height = dp(260)
+                    }
+                }
+                binding.playerContainer.layoutParams = LinearLayout.LayoutParams(0, -1, 1.5f)
+            } else {
+                binding.playerContainer.layoutParams = binding.playerContainer.layoutParams.apply {
+                    width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                    height = (210 * density).toInt()
+                }
             }
             binding.playerView.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -1245,17 +1326,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_MENU) {
+            showSettingsDialog()
+            return true
+        }
+        if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE || keyCode == KeyEvent.KEYCODE_SPACE) {
+            val exo = player ?: return super.onKeyDown(keyCode, event)
+            if (exo.isPlaying) exo.pause() else exo.play()
+            showPlayerOverlayTemporarily()
+            return true
+        }
         if (keyCode == KeyEvent.KEYCODE_BACK && isFullscreen) {
             if (!isAndroidTv) applyRotationSetting(settingsPrefs.getString("setting_rotation", "Auto") ?: "Auto")
             setFullscreenUi(false)
             return true
         }
-        if (isAndroidTv && (keyCode == KeyEvent.KEYCODE_CHANNEL_UP ||
-                (keyCode == KeyEvent.KEYCODE_DPAD_UP && (isFullscreen || binding.playerContainer.hasFocus())))) {
+        if (isAndroidTv && keyCode == KeyEvent.KEYCODE_CHANNEL_UP) {
             return changeChannel(-1) || super.onKeyDown(keyCode, event)
         }
-        if (isAndroidTv && (keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN ||
-                (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && (isFullscreen || binding.playerContainer.hasFocus())))) {
+        if (isAndroidTv && keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN) {
             return changeChannel(1) || super.onKeyDown(keyCode, event)
         }
         if (isAndroidTv && keyCode == KeyEvent.KEYCODE_MEDIA_PREVIOUS) return changeChannel(-1)
