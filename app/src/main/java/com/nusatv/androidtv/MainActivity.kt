@@ -466,7 +466,7 @@ class MainActivity : AppCompatActivity() {
                 background = rounded(if (selected) "#0752A8" else "#132337", if (selected) "#168BFF" else "#132337", 12)
                 isClickable = true
                 isFocusable = true
-                setOnClickListener(action)
+                setOnClickListener { action() }
             }
             host.addView(row, LinearLayout.LayoutParams(-1, dp(58)).apply { bottomMargin = dp(9) })
         }
