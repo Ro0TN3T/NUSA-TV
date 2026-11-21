@@ -50,6 +50,8 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderManager
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegSubtitleExtractorsFactory
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.withFfmpegSubtitles
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
@@ -166,7 +168,8 @@ class MainActivity : AppCompatActivity() {
         binding.btnFullscreen.setOnClickListener { requestLandscapeFullscreen() }
 
         binding.playerContainer.setOnClickListener {
-            toggleFullscreen(!isFullscreen)
+            // A tap reveals the overlay; fullscreen is a separate explicit control.
+            showPlayerOverlayTemporarily()
         }
         setupSwipeGestures()
         setupFullscreenOverlayControls()
@@ -568,34 +571,41 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    /** Player overlay controls inspired by the ION TV layout. These sit over the video,
-     * so opening settings/quality never navigates away from or stops playback. */
+    /** ION TV-style two-row controls over the video. Subtitle selection is intentionally omitted. */
     private fun setupFullscreenOverlayControls() {
-        // Satu-satunya set kontrol: overlay custom dipakai pada embedded dan fullscreen.
-        // Native Media3 controller dinonaktifkan di kedua layout XML.
         val overlay = FrameLayout(this).apply {
             isClickable = false
             isFocusable = false
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
-        val bottomControls = LinearLayout(this).apply {
+
+        fun makeRow(gravity: Int): LinearLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(6), dp(5), dp(6), dp(5))
-            background = rounded("#D910131D", "#665B6478", 18)
-            elevation = dp(8).toFloat()
+            setPadding(dp(8), dp(5), dp(8), dp(5))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#66070B12"))
+                cornerRadius = dp(24).toFloat()
+            }
+            elevation = dp(5).toFloat()
             isFocusable = false
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                gravity
+            )
         }
-        fun overlayButton(symbol: String, description: String, action: () -> Unit): TextView {
+
+        fun overlayButton(symbol: String, description: String, action: () -> Unit,
+                          prominent: Boolean = false): TextView {
             val focused = GradientDrawable().apply {
-                setColor(Color.parseColor("#334A75B8"))
-                setStroke(dp(2), Color.parseColor("#FF55C8F2"))
-                cornerRadius = dp(11).toFloat()
+                setColor(Color.parseColor("#5539BDF0"))
+                setStroke(dp(2), Color.WHITE)
+                cornerRadius = dp(28).toFloat()
             }
             val normal = GradientDrawable().apply {
-                setColor(Color.parseColor("#292F3D"))
-                setStroke(dp(1), Color.parseColor("#665B6478"))
-                cornerRadius = dp(11).toFloat()
+                setColor(if (prominent) Color.WHITE else Color.TRANSPARENT)
+                cornerRadius = dp(28).toFloat()
             }
             val states = StateListDrawable().apply {
                 addState(intArrayOf(android.R.attr.state_focused), focused)
@@ -604,69 +614,74 @@ class MainActivity : AppCompatActivity() {
             }
             return TextView(this).apply {
                 text = symbol
-                textSize = if (symbol.length > 2) 12f else 17f
+                textSize = if (prominent) 25f else 21f
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
-                setTextColor(Color.WHITE)
+                setTextColor(if (prominent) Color.BLACK else Color.WHITE)
                 contentDescription = description
                 isClickable = true
                 isFocusable = true
                 isFocusableInTouchMode = true
-                minWidth = dp(40)
-                minHeight = dp(40)
+                minWidth = if (prominent) dp(62) else dp(48)
+                minHeight = if (prominent) dp(62) else dp(48)
                 background = states
                 setOnClickListener { action(); showPlayerOverlayTemporarily() }
-                layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply {
-                    marginStart = dp(2)
-                    marginEnd = dp(2)
+                layoutParams = LinearLayout.LayoutParams(
+                    if (prominent) dp(62) else dp(48),
+                    if (prominent) dp(62) else dp(48)
+                ).apply {
+                    marginStart = dp(5)
+                    marginEnd = dp(5)
                 }
             }
         }
+
         lateinit var playPause: TextView
         lateinit var mute: TextView
-        val previous = overlayButton("|◀", "Channel sebelumnya (CH-) ") { changeChannel(-1) }
-        playPause = overlayButton("Ⅱ", "Putar atau jeda") {
+
+        // Upper row: playback options, like the compact controls along the top of ION TV.
+        val topRow = makeRow(Gravity.TOP or Gravity.END)
+        topRow.addView(overlayButton("♫", "Pilih audio track") {
+            showTrackSelectionDialog(C.TRACK_TYPE_AUDIO)
+        })
+        topRow.addView(overlayButton("1×", "Kecepatan pemutaran") { showPlaybackSpeedDialog() })
+        topRow.addView(overlayButton("HD", "Kualitas video jika tersedia") { showVideoQualityDialog() })
+        topRow.addView(overlayButton("▣", "Ukuran tampilan video") { showVideoResizeDialog() })
+        topRow.addView(overlayButton("⚙", "Pengaturan player") { showSettingsDialog() })
+
+        // Lower row: channel navigation and the large central play/pause control.
+        val bottomRow = makeRow(Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
+        bottomRow.addView(overlayButton("|◀", "Channel sebelumnya") { changeChannel(-1) })
+        playPause = overlayButton("Ⅱ", "Putar atau jeda", {
             val exo = player ?: return@overlayButton
-            if (exo.playWhenReady) exo.pause() else exo.play()
-            playPause.text = if (exo.playWhenReady) "Ⅱ" else "▶"
-        }
+            if (exo.isPlaying || exo.playWhenReady) exo.pause() else exo.play()
+            playPause.text = if (exo.isPlaying || exo.playWhenReady) "Ⅱ" else "▶"
+        }, prominent = true)
         playPauseControl = playPause
-        val next = overlayButton("▶|", "Channel berikutnya (CH+)") { changeChannel(1) }
+        bottomRow.addView(playPause)
+        bottomRow.addView(overlayButton("▶|", "Channel berikutnya") { changeChannel(1) })
         mute = overlayButton("🔊", "Bisukan atau aktifkan suara") {
             val exo = player ?: return@overlayButton
             val muted = exo.volume > 0f
             exo.volume = if (muted) 0f else 1f
             muteLabelUpdate(mute, muted)
         }
-        val audio = overlayButton("♫", "Pilih audio track") { showTrackSelectionDialog(C.TRACK_TYPE_AUDIO) }
-        val subtitles = overlayButton("CC", "Pilih subtitle") { showTrackSelectionDialog(C.TRACK_TYPE_TEXT) }
-        val speed = overlayButton("1×", "Kecepatan pemutaran") { showPlaybackSpeedDialog() }
-        val quality = overlayButton("HD", "Kualitas video jika tersedia") { showVideoQualityDialog() }
-        val resize = overlayButton("▣", "Ukuran tampilan video") { showVideoResizeDialog() }
-        val decoder = overlayButton("FF", "Pengaturan decoder") { showDecoderDialog() }
-        val settings = overlayButton("⚙", "Pengaturan player") { showSettingsDialog() }
-        val fullscreen = overlayButton("⛶", "Masuk atau keluar layar penuh") { toggleFullscreen(!isFullscreen) }
+        bottomRow.addView(mute)
+        bottomRow.addView(overlayButton("⛶", "Masuk atau keluar layar penuh") {
+            toggleFullscreen(!isFullscreen)
+        })
 
-        listOf(previous, playPause, next, mute, audio, subtitles, speed, quality, resize, decoder, settings, fullscreen)
-            .forEach(bottomControls::addView)
-
-        val horizontal = HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            isFillViewport = false
-            clipToPadding = false
-            addView(bottomControls, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            ))
-        }
-        val bottomParams = FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
+        overlay.addView(topRow, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.BOTTOM
-        ).apply {
-            setMargins(dp(8), 0, dp(8), dp(8))
-        }
-        overlay.addView(horizontal, bottomParams)
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.TOP or Gravity.END
+        ).apply { setMargins(dp(8), dp(8), dp(8), 0) })
+        overlay.addView(bottomRow, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        ).apply { setMargins(dp(8), 0, dp(8), dp(10)) })
+
         overlay.visibility = View.VISIBLE
         binding.playerContainer.addView(overlay, FrameLayout.LayoutParams(-1, -1))
         fullscreenOverlay = overlay
@@ -978,14 +993,11 @@ class MainActivity : AppCompatActivity() {
         val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
             .setDefaultRequestProperties(headersMap)
 
-        // The same authenticated OkHttp data source is used for manifests, segments,
-        // and subtitle requests. NextLib 1.11.0-0.15.0 provides FFmpeg audio/video
-        // renderers, but does not publish FfmpegSubtitleExtractorsFactory or
-        // withFfmpegSubtitles. Keep Media3's built-in subtitle extractors here;
-        // standard WebVTT, TTML, SubRip, and supported in-container text tracks
-        // continue to work without referencing unavailable NextLib APIs.
-        val mediaSourceFactory = DefaultMediaSourceFactory(this)
+        // The factory is shared by HLS manifest, variant playlist, key (when permitted),
+        // and media-segment requests. OkHttp follows HTTP and HTTPS redirects.
+        val mediaSourceFactory = DefaultMediaSourceFactory(this, FfmpegSubtitleExtractorsFactory())
             .setDataSourceFactory(dataSourceFactory)
+            .withFfmpegSubtitles(dataSourceFactory)
 
         val mediaItemBuilder = MediaItem.Builder().setUri(candidate.url)
         when (candidate.mimeType) {
